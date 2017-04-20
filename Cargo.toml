@@ -1,6 +1,9 @@
 [package]
-authors = ["Ana-Maria <mihalacheana.maria@yahoo.com>"]
+authors = ["The Lyken developers"]
+description = "Experimental reactive component system."
+license = "MIT/Apache-2.0"
 name = "lyken"
+repository = "https://github.com/lykenware/lyken"
 version = "0.1.0"
 
 [dependencies]
