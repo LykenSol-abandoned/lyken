@@ -10,9 +10,9 @@ use lyken::dart::lex::*;
 use std::env;
 
 fn main() {
+    let mut src = String::new();
     for entry in WalkDir::new(env::args().nth(1).unwrap()) {
         let entry = entry.unwrap();
-        let mut src = String::new();
         if entry.path().extension().map_or(false, |x| x == "dart") {
             let mut file = File::open(entry.path()).unwrap();
             src.clear();
