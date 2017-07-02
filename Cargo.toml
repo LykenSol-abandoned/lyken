@@ -6,9 +6,10 @@ name = "lyken"
 repository = "https://github.com/lykenware/lyken"
 version = "0.1.0"
 
-[dependencies]
-difference = "1.0.0"
-walkdir = "1.0.7"
-
 [[bin]]
 name = "lex-dart"
+
+[dependencies]
+difference = "1.0.0"
+unicode-xid = "0.1.0"
+walkdir = "1.0.7"
