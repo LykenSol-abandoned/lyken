@@ -1,3 +1,5 @@
+use unicode_xid::UnicodeXID;
+
 pub enum Token {
     WhiteSpace(String),
     Punctuation(char),
@@ -85,8 +87,8 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ErrorLocation> {
                 bump!(or tokens.push(Token::WhiteSpace(buffer)));
             }
             tokens.push(Token::WhiteSpace(buffer));
-        } else if c.is_xid_start() || c == '$' || c == '_' {
-            while c.is_xid_continue() || c == '$' {
+        } else if UnicodeXID::is_xid_start(c) || c == '$' || c == '_' {
+            while UnicodeXID::is_xid_continue(c) || c == '$' {
                 buffer.push(c);
                 bump!(or tokens.push(Token::Identifier(buffer)));
             }
