@@ -155,13 +155,13 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ErrorLocation> {
                     }
                 }
                 Some(&Token::StringLiteral {
-                          ref contents,
-                          raw: prev_raw,
-                          triple: false,
-                          quote: prev_quote,
-                          interpolation_after: false,
-                          interpolation_before: false,
-                      }) => {
+                    ref contents,
+                    raw: prev_raw,
+                    triple: false,
+                    quote: prev_quote,
+                    interpolation_after: false,
+                    interpolation_before: false,
+                }) => {
                     if contents.is_empty() && prev_quote == quote {
                         triple = true;
                         raw = prev_raw;
@@ -199,13 +199,11 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ErrorLocation> {
                 if c == '$' && !raw {
                     bump!(or emit!(Error::UnterminatedStringLiteral));
                     if c == '{' {
-                        interpolation_levels.push(
-                            InterpolationLevel {
-                                quote,
-                                triple,
-                                brace_depth: 1,
-                            },
-                        );
+                        interpolation_levels.push(InterpolationLevel {
+                            quote,
+                            triple,
+                            brace_depth: 1,
+                        });
                         interpolation_after = true;
                         break;
                     }
@@ -219,16 +217,14 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ErrorLocation> {
                 buffer.push(c);
                 bump!(or emit!(Error::UnterminatedStringLiteral));
             }
-            tokens.push(
-                Token::StringLiteral {
-                    contents: buffer,
-                    raw,
-                    triple,
-                    quote,
-                    interpolation_after,
-                    interpolation_before,
-                },
-            );
+            tokens.push(Token::StringLiteral {
+                contents: buffer,
+                raw,
+                triple,
+                quote,
+                interpolation_after,
+                interpolation_before,
+            });
             bump!();
         } else {
             emit!(Error::UnhandledCharacter(c))
