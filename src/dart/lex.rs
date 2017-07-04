@@ -1,5 +1,6 @@
 use unicode_xid::UnicodeXID;
 
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Token {
     WhiteSpace(String),
     Punctuation(char),
@@ -13,6 +14,16 @@ pub enum Token {
         interpolation_before: bool,
         interpolation_after: bool,
     },
+}
+
+impl Token {
+    pub fn as_ident(&self) -> Option<&str> {
+        if let Token::Identifier(ref ident) = *self {
+            Some(ident)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug)]
