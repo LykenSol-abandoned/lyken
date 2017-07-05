@@ -15,7 +15,7 @@ fn main() {
     file.read_to_string(&mut src).unwrap();
     match tokenize(&src) {
         Ok(tokens) => {
-           let items = parse_dsl(&tokens);
+           let items = Parser::new(&tokens).parse_items();
            let mut out = File::create(path.with_extension("dart")).unwrap();
            Codegen::new(&mut out).codegen_items(&items).unwrap();
         }
