@@ -9,6 +9,9 @@ version = "0.1.0"
 [[bin]]
 name = "lex-dart"
 
+[[bin]]
+name = "test-dsl"
+
 [dependencies]
 difference = "1.0.0"
 unicode-xid = "0.1.0"
