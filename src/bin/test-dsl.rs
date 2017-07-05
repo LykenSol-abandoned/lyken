@@ -17,7 +17,7 @@ fn main() {
         Ok(tokens) => {
            let items = parse_dsl(&tokens);
            let mut out = File::create(path.with_extension("dart")).unwrap();
-           codegen_flutter(&items, &mut out).unwrap();
+           Codegen::new(&mut out).codegen_items(&items).unwrap();
         }
         Err(error) => {
             println!("{}:{} {:?}", path.display(), error.line, error.err);
