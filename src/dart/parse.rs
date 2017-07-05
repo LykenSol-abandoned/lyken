@@ -1,8 +1,15 @@
+use std::cell::Cell;
 use dart::dsl::*;
 use dart::lex::{Token, stringify};
 
 pub fn parse_dsl(tokens: &[Token]) -> Vec<Item> {
-    let mut tokens = tokens.iter();
+    let allow_whitespace = Cell::new(false);
+    let mut tokens = tokens.iter().filter(|token| {
+        match **token {
+            Token::WhiteSpace(_) => allow_whitespace.get(),
+            _ => true
+        }
+    });
     let mut items = vec![];
     while let Some(token) = tokens.next() {
         if token.as_ident() == Some("def") {
@@ -25,6 +32,7 @@ pub fn parse_dsl(tokens: &[Token]) -> Vec<Item> {
                     let mut expr = vec![];
                     let mut depth = 0;
                     let mut ends_in_brace = false;
+                    allow_whitespace.set(true);
                     while let Some(token) = tokens.next() {
                         if let Token::Punctuation(c) = *token {
                             if depth == 0 {
@@ -45,6 +53,7 @@ pub fn parse_dsl(tokens: &[Token]) -> Vec<Item> {
                         }
                         expr.push(token.clone());
                     }
+                    allow_whitespace.set(false);
                     let expr = Expr { dart: stringify(&expr) };
                     let field = Field {
                         name: name,
@@ -61,8 +70,10 @@ pub fn parse_dsl(tokens: &[Token]) -> Vec<Item> {
             items.push(Item::ComponentDef(name, parts));
         }
         if token.as_ident() == Some("dart") {
+            assert_eq!(*tokens.next().unwrap(), Token::Punctuation('{'));
             let mut code = vec![];
             let mut depth = 0;
+            allow_whitespace.set(true);
             while let Some(token) = tokens.next() {
                 if let Token::Punctuation(c) = *token {
                     if depth == 0 {
@@ -79,6 +90,7 @@ pub fn parse_dsl(tokens: &[Token]) -> Vec<Item> {
                 }
                 code.push(token.clone());
             }
+            allow_whitespace.set(false);
             items.push(Item::VerbatimDart(stringify(&code)));
         }
     }
