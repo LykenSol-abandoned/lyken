@@ -1,14 +1,15 @@
 use unicode_xid::UnicodeXID;
 use std::str;
+use syntax::symbol::Symbol;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Token {
-    WhiteSpace(String),
+    WhiteSpace(Symbol),
     Punctuation(char),
-    Identifier(String),
-    IntegerLiteral(String),
+    Identifier(Symbol),
+    IntegerLiteral(Symbol),
     StringLiteral {
-        contents: String,
+        contents: Symbol,
         raw: bool,
         triple: bool,
         quote: char,
@@ -18,8 +19,8 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn as_ident(&self) -> Option<&str> {
-        if let Token::Identifier(ref ident) = *self {
+    pub fn as_ident(&self) -> Option<Symbol> {
+        if let Token::Identifier(ident) = *self {
             Some(ident)
         } else {
             None
@@ -104,21 +105,21 @@ impl<'a> Lexer<'a> {
             if self.c.is_numeric() {
                 while self.c.is_alphanumeric() {
                     buffer.push(self.c);
-                    bump!(or self.tokens.push(Token::IntegerLiteral(buffer)));
+                    bump!(or self.tokens.push(Token::IntegerLiteral(Symbol::intern(&buffer))));
                 }
-                self.tokens.push(Token::IntegerLiteral(buffer));
+                self.tokens.push(Token::IntegerLiteral(Symbol::intern(&buffer)));
             } else if self.c.is_whitespace() {
                 while self.c.is_whitespace() {
                     buffer.push(self.c);
-                    bump!(or self.tokens.push(Token::WhiteSpace(buffer)));
+                    bump!(or self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer))));
                 }
-                self.tokens.push(Token::WhiteSpace(buffer));
+                self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer)));
             } else if UnicodeXID::is_xid_start(self.c) || self.c == '$' || self.c == '_' {
                 while UnicodeXID::is_xid_continue(self.c) || self.c == '$' {
                     buffer.push(self.c);
-                    bump!(or self.tokens.push(Token::Identifier(buffer)));
+                    bump!(or self.tokens.push(Token::Identifier(Symbol::intern(&buffer))));
                 }
-                self.tokens.push(Token::Identifier(buffer));
+                self.tokens.push(Token::Identifier(Symbol::intern(&buffer)));
             } else if "{}[]()=+-*%&|.,:;!<>@~#?^".contains(self.c) && !interpolation_before {
                 self.tokens.push(Token::Punctuation(self.c));
                 bump!();
@@ -128,9 +129,9 @@ impl<'a> Lexer<'a> {
                     buffer.push('/');
                     while self.c != '\n' {
                         buffer.push(self.c);
-                        bump!(or self.tokens.push(Token::WhiteSpace(buffer)));
+                        bump!(or self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer))));
                     }
-                    self.tokens.push(Token::WhiteSpace(buffer));
+                    self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer)));
                 } else if self.c == '*' {
                     let mut depth = 0;
                     let unterminated = Error::UnterminatedBlockComment { start: self.line };
@@ -162,7 +163,7 @@ impl<'a> Lexer<'a> {
                         bump!(or emit!(unterminated));
                     }
                     buffer.push('/');
-                    self.tokens.push(Token::WhiteSpace(buffer));
+                    self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer)));
                     bump!();
 
                 } else {
@@ -188,7 +189,7 @@ impl<'a> Lexer<'a> {
                         interpolation_after: false,
                         interpolation_before: false,
                     }) => {
-                        if contents.is_empty() && prev_quote == quote {
+                        if contents.as_str().is_empty() && prev_quote == quote {
                             triple = true;
                             raw = prev_raw;
                         }
@@ -244,7 +245,7 @@ impl<'a> Lexer<'a> {
                     bump!(or emit!(Error::UnterminatedStringLiteral));
                 }
                 self.tokens.push(Token::StringLiteral {
-                    contents: buffer,
+                    contents: Symbol::intern(&buffer),
                     raw,
                     triple,
                     quote,
@@ -263,12 +264,12 @@ pub fn stringify(tokens: &[Token]) -> String {
     let mut text = String::new();
     for token in tokens {
         match *token {
-            Token::WhiteSpace(ref s) |
-            Token::IntegerLiteral(ref s) |
-            Token::Identifier(ref s) => text.push_str(s),
+            Token::WhiteSpace(s) |
+            Token::IntegerLiteral(s) |
+            Token::Identifier(s) => text.push_str(&s.as_str()),
             Token::Punctuation(c) => text.push(c),
             Token::StringLiteral {
-                ref contents,
+                contents,
                 raw,
                 triple,
                 quote,
@@ -287,7 +288,7 @@ pub fn stringify(tokens: &[Token]) -> String {
                     }
                     text.push(quote);
                 }
-                text.push_str(&contents);
+                text.push_str(&contents.as_str());
                 if interpolation_after {
                     text.push_str("${");
                 } else {

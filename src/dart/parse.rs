@@ -1,12 +1,13 @@
 use std::slice;
 use dart::dsl::*;
 use dart::lex::{Token, stringify};
+use syntax::symbol::Symbol;
 
 pub struct Parser<'a> {
     tokens: slice::Iter<'a, Token>,
     cur: Option<&'a Token>,
 }
-
+/// ->to_ string si string  replace to symbool
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
         let mut tokens = tokens.iter();
@@ -30,7 +31,7 @@ impl<'a> Parser<'a> {
 
     fn is_keyword(&self, s: &str) -> bool {
         if let Some(token) = self.cur {
-            token.as_ident() == Some(s)
+            token.as_ident().map_or(false, |x| x == s)
         } else {
             false
         }
@@ -64,8 +65,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_ident(&mut self) -> String {
-        let ident = self.cur.unwrap().as_ident().unwrap().to_string();
+    fn parse_ident(&mut self) -> Symbol {
+        let ident = self.cur.unwrap().as_ident().unwrap();
         self.bump();
         ident
     }
