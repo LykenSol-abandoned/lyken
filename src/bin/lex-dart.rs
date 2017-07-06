@@ -17,7 +17,7 @@ fn main() {
             let mut file = File::open(entry.path()).unwrap();
             src.clear();
             file.read_to_string(&mut src).unwrap();
-            match tokenize(&src) {
+            match Lexer::new(&src).tokenize() {
                 Ok(tokens) => {
                     let result = stringify(&tokens);
                     if result != src {
