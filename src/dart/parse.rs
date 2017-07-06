@@ -94,7 +94,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> Expr {
-        Expr { dart: self.parse_dart() }
+        Expr::VerbatimDart(self.parse_dart())
     }
 
     fn parse_field(&mut self) -> Field {
@@ -125,7 +125,7 @@ impl<'a> Parser<'a> {
         assert!(self.eat_punctuation('{'));
         let fields = self.parse_fields();
         assert!(self.eat_punctuation('}'));
-        ComponentPart::Instance(name, fields)
+        ComponentPart::Instance(Instance { name, fields })
     }
 
     fn parse_component_parts(&mut self) -> Vec<ComponentPart> {

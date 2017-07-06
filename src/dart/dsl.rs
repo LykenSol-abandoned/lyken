@@ -4,8 +4,13 @@ pub enum Item {
 }
 
 pub enum ComponentPart {
-    Instance(String, Vec<Field>),
+    Instance(Instance),
     Field(String, Option<Type>, Option<Expr>),
+}
+
+pub struct Instance {
+    pub name: String,
+    pub fields: Vec<Field>,
 }
 
 pub struct Field {
@@ -17,6 +22,7 @@ pub struct Type {
     pub dart: String,
 }
 
-pub struct Expr {
-    pub dart: String,
+pub enum Expr {
+    Instance(Instance),
+    VerbatimDart(String),
 }
