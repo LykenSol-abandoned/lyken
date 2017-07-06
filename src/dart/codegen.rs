@@ -38,20 +38,43 @@ impl<'a> Codegen<'a> {
 
     fn codegen_part(&mut self, part: &ComponentPart) -> io::Result<()> {
         match *part {
-            ComponentPart::Instance(ref iname, ref args) => {
-                writeln!(self.out, "return new {}(", iname)?;
-                for arg in args {
-                    self.codegen_field(arg)?;
-                }
-                writeln!(self.out, ");")?;
+            ComponentPart::Instance(ref instance) => {
+                write!(self.out, "return ")?;
+                self.codegen_instance(&instance)?;
+                writeln!(self.out, ";")?;
             }
-            ComponentPart::Field(..) => {}
+            ComponentPart::Field(..) => {
+                unimplemented!();
+            }
         }
         Ok(())
     }
 
     fn codegen_field(&mut self, field: &Field) -> io::Result<()> {
-        writeln!(self.out, "{}: {},", field.name, field.value.dart)?;
+        write!(self.out, "{}: ", field.name)?;
+        self.codegen_expr(&field.value)?;
+        writeln!(self.out, ",")?;
+        Ok(())
+    }
+
+    fn codegen_expr(&mut self, expr: &Expr) -> io::Result<()> {
+        match *expr {
+            Expr::Instance(ref instance) => {
+                self.codegen_instance(&instance)?;
+            }
+            Expr::VerbatimDart(ref dart) => {
+                write!(self.out, "{}", dart)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn codegen_instance(&mut self, instance: &Instance) -> io::Result<()> {
+        writeln!(self.out, "new {}( ", instance.name)?;
+        for field in &instance.fields {
+            self.codegen_field(field)?;
+        }
+        write!(self.out, ")")?;
         Ok(())
     }
 }
