@@ -1,20 +1,22 @@
+use syntax::symbol::Symbol;
+
 pub enum Item {
-    ComponentDef(String, Vec<ComponentPart>),
+    ComponentDef(Symbol, Vec<ComponentPart>),
     VerbatimDart(String),
 }
 
 pub enum ComponentPart {
     Instance(Instance),
-    Field(String, Option<Type>, Option<Expr>),
+    Field(Symbol, Option<Type>, Option<Expr>),
 }
 
 pub struct Instance {
-    pub name: String,
+    pub name: Symbol,
     pub fields: Vec<Field>,
 }
 
 pub struct Field {
-    pub name: String,
+    pub name: Symbol,
     pub value: Expr,
 }
 
