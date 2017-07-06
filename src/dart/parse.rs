@@ -2,10 +2,12 @@ use std::slice;
 use dart::dsl::*;
 use dart::lex::{Token, stringify};
 use syntax::symbol::Symbol;
+use std::collections::VecDeque;
 
 pub struct Parser<'a> {
     tokens: slice::Iter<'a, Token>,
     cur: Option<&'a Token>,
+    buffer: VecDeque<&'a Token>,
 }
 /// ->to_ string si string  replace to symbool
 impl<'a> Parser<'a> {
@@ -14,6 +16,7 @@ impl<'a> Parser<'a> {
         Parser {
             cur: tokens.next(),
             tokens: tokens,
+            buffer: VecDeque::new(),
         }
     }
 
@@ -37,14 +40,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn next_token(&mut self) -> Option<&'a Token> {
+        if let Some(token) = self.buffer.pop_front() {
+            Some(token)
+        } else if let Some(token) = self.tokens.next() {
+            Some(token)
+        } else {
+            None
+        }
+    }
+
     fn bump(&mut self) {
-        loop {
-            self.cur = self.tokens.next();
-            match self.cur {
-                Some(&Token::WhiteSpace(_)) => {}
-                _ => break,
+        while let Some(token) = self.next_token() {
+            self.cur = Some(token);
+            if !token.is_whitespace() {
+                return;
             }
         }
+        self.cur = None;
     }
 
     fn eat_punctuation(&mut self, c: char) -> bool {
@@ -63,6 +76,16 @@ impl<'a> Parser<'a> {
         } else {
             false
         }
+    }
+
+    fn peek(&mut self) -> Option<&'a Token> {
+        while let Some(token) = self.next_token() {
+            self.buffer.push_back(token);
+            if token.is_whitespace() {
+                return Some(token);
+            }
+        }
+        None
     }
 
     fn parse_ident(&mut self) -> Symbol {
@@ -89,12 +112,21 @@ impl<'a> Parser<'a> {
                 }
             }
             code.push(token.clone());
-            self.cur = self.tokens.next();
+            if let Some(token) = self.buffer.pop_front() {
+                self.cur = Some(token);
+            } else {
+                self.cur = self.tokens.next();
+            }
         }
         stringify(&code)
     }
 
     fn parse_expr(&mut self) -> Expr {
+        if let Some(&Token::Identifier(_)) = self.cur {
+            if let Some(&Token::Punctuation('{')) = self.peek() {
+                return Expr::Instance(self.parse_instance());
+            }
+        }
         Expr::VerbatimDart(self.parse_dart())
     }
 
@@ -121,12 +153,16 @@ impl<'a> Parser<'a> {
         fields
     }
 
-    fn parse_component_part(&mut self) -> ComponentPart {
+    fn parse_instance(&mut self) -> Instance {
         let name = self.parse_ident();
         assert!(self.eat_punctuation('{'));
         let fields = self.parse_fields();
         assert!(self.eat_punctuation('}'));
-        ComponentPart::Instance(Instance { name, fields })
+        Instance { name, fields }
+    }
+
+    fn parse_component_part(&mut self) -> ComponentPart {
+        ComponentPart::Instance(self.parse_instance())
     }
 
     fn parse_component_parts(&mut self) -> Vec<ComponentPart> {

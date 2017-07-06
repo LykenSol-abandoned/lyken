@@ -26,6 +26,13 @@ impl Token {
             None
         }
     }
+
+    pub fn is_whitespace(&self) -> bool {
+        match *self {
+            Token::WhiteSpace(_) => true,
+            _ => false
+        }
+    }
 }
 
 #[derive(Debug)]
