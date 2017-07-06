@@ -11,10 +11,10 @@ dart {
 def FlutterView {
   MaterialApp {
     title: 'Flutter View',
-    theme: new ThemeData(
+    theme: ThemeData {
       primarySwatch: Colors.grey,
-    ),
-    home: new MyHomePage()
+    },
+    home: MyHomePage /*lalalal*/ {}
   }
 }
 
