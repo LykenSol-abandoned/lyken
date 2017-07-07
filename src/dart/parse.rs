@@ -9,7 +9,7 @@ pub struct Parser<'a> {
     cur: Option<&'a Token>,
     buffer: VecDeque<&'a Token>,
 }
-/// ->to_ string si string  replace to symbool
+
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
         let mut tokens = tokens.iter();
