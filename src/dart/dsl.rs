@@ -1,18 +1,19 @@
 use syntax::symbol::Symbol;
 
 pub enum Item {
-    ComponentDef(Symbol, Vec<ComponentPart>),
+    ComponentDef(Symbol, Vec<FieldDef>, Instance),
     VerbatimDart(String),
-}
-
-pub enum ComponentPart {
-    Instance(Instance),
-    Field(Symbol, Option<Type>, Option<Expr>),
 }
 
 pub struct Instance {
     pub name: Symbol,
     pub fields: Vec<Field>,
+}
+
+pub struct FieldDef {
+    pub name: Symbol,
+    pub ty: Option<Type>,
+    pub default: Option<Expr>,
 }
 
 pub struct Field {
