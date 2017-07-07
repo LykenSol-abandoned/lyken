@@ -1,18 +1,16 @@
-use std::slice;
 use dart::dsl::*;
 use dart::lex::{Token, stringify};
 use syntax::symbol::Symbol;
 use std::collections::VecDeque;
 
-pub struct Parser<'a> {
-    tokens: slice::Iter<'a, Token>,
+pub struct Parser<'a, I> {
+    tokens: I,
     cur: Option<&'a Token>,
     buffer: VecDeque<&'a Token>,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(tokens: &'a [Token]) -> Self {
-        let mut tokens = tokens.iter();
+impl<'a, I: Iterator<Item = &'a Token>> Parser<'a, I> {
+    pub fn new(mut tokens: I) -> Self {
         Parser {
             cur: tokens.next(),
             tokens: tokens,
