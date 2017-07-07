@@ -14,7 +14,7 @@ def FlutterView {
     theme: ThemeData {
       primarySwatch: Colors.grey,
     },
-    home: MyHomePage /*lalalal*/ {}
+    home: MyHomePage {}
   }
 }
 
