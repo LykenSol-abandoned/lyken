@@ -120,6 +120,11 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         stringify(&code)
     }
 
+    fn parse_type(&mut self) -> Type {
+        let ty = self.parse_dart();
+        Type { dart: ty }
+    }
+
     fn parse_expr(&mut self) -> Expr {
         if let Some(Token::Identifier(_)) = self.cur {
             if let Some(Token::Punctuation('{')) = self.peek() {
@@ -152,6 +157,37 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         fields
     }
 
+    fn parse_field_def(&mut self) -> FieldDef {
+        let name = self.parse_ident();
+        let mut fd = FieldDef {
+            name: name,
+            ty: None,
+            default: None,
+        };
+        if self.eat_punctuation(':') {
+            fd.ty = Some(self.parse_type());
+        }
+        if self.eat_punctuation('=') {
+            fd.default = Some(self.parse_expr());
+        }
+        fd
+    }
+
+    fn parse_field_defs(&mut self) -> Vec<FieldDef> {
+        let mut fields = vec![];
+        while !self.out_of_tokens() {
+            if let Some(token) = self.peek() {
+                if token == Token::Punctuation('{') {
+                    break;
+                } else {
+                    fields.push(self.parse_field_def());
+                }
+            }
+            assert!(self.eat_punctuation(','));
+        }
+        fields
+    }
+
     fn parse_instance(&mut self) -> Instance {
         let name = self.parse_ident();
         assert!(self.eat_punctuation('{'));
@@ -160,28 +196,15 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         Instance { name, fields }
     }
 
-    fn parse_component_part(&mut self) -> ComponentPart {
-        ComponentPart::Instance(self.parse_instance())
-    }
-
-    fn parse_component_parts(&mut self) -> Vec<ComponentPart> {
-        let mut parts = vec![];
-        while !self.out_of_tokens() {
-            if self.is_punctuation('}') {
-                break;
-            }
-            parts.push(self.parse_component_part());
-        }
-        parts
-    }
 
     fn parse_item(&mut self) -> Item {
         if self.eat_keyword("def") {
             let name = self.parse_ident();
             assert!(self.eat_punctuation('{'));
-            let parts = self.parse_component_parts();
+            let fields = self.parse_field_defs();
+            let instance = self.parse_instance();
             assert!(self.eat_punctuation('}'));
-            Item::ComponentDef(name, parts)
+            Item::ComponentDef(name, fields, instance)
         } else if self.eat_keyword("dart") {
             assert!(self.eat_punctuation('{'));
             let dart = self.parse_dart();
