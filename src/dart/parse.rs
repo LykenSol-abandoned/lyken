@@ -3,13 +3,13 @@ use dart::lex::{Token, stringify};
 use syntax::symbol::Symbol;
 use std::collections::VecDeque;
 
-pub struct Parser<'a, I> {
+pub struct Parser<I> {
     tokens: I,
-    cur: Option<&'a Token>,
-    buffer: VecDeque<&'a Token>,
+    cur: Option<Token>,
+    buffer: VecDeque<Token>,
 }
 
-impl<'a, I: Iterator<Item = &'a Token>> Parser<'a, I> {
+impl<I: Iterator<Item = Token>> Parser<I> {
     pub fn new(mut tokens: I) -> Self {
         Parser {
             cur: tokens.next(),
@@ -24,7 +24,7 @@ impl<'a, I: Iterator<Item = &'a Token>> Parser<'a, I> {
 
     fn is_punctuation(&self, c: char) -> bool {
         if let Some(token) = self.cur {
-            *token == Token::Punctuation(c)
+            token == Token::Punctuation(c)
         } else {
             false
         }
@@ -38,7 +38,7 @@ impl<'a, I: Iterator<Item = &'a Token>> Parser<'a, I> {
         }
     }
 
-    fn next_token(&mut self) -> Option<&'a Token> {
+    fn next_token(&mut self) -> Option<Token> {
         if let Some(token) = self.buffer.pop_front() {
             Some(token)
         } else if let Some(token) = self.tokens.next() {
@@ -76,8 +76,8 @@ impl<'a, I: Iterator<Item = &'a Token>> Parser<'a, I> {
         }
     }
 
-    fn peek(&mut self) -> Option<&'a Token> {
-        for token in &self.buffer {
+    fn peek(&mut self) -> Option<Token> {
+        for &token in &self.buffer {
             if !token.is_whitespace() {
                 return Some(token);
             }
@@ -101,7 +101,7 @@ impl<'a, I: Iterator<Item = &'a Token>> Parser<'a, I> {
         let mut depth = 0;
         let mut code = vec![];
         while let Some(token) = self.cur {
-            if let Token::Punctuation(c) = *token {
+            if let Token::Punctuation(c) = token {
                 match c {
                     ',' if depth == 0 => break,
                     '{' | '[' | '(' => depth += 1,
@@ -114,15 +114,15 @@ impl<'a, I: Iterator<Item = &'a Token>> Parser<'a, I> {
                     _ => {}
                 }
             }
-            code.push(token.clone());
-            self.cur = self.next_token()
+            code.push(token);
+            self.cur = self.next_token();
         }
         stringify(&code)
     }
 
     fn parse_expr(&mut self) -> Expr {
-        if let Some(&Token::Identifier(_)) = self.cur {
-            if let Some(&Token::Punctuation('{')) = self.peek() {
+        if let Some(Token::Identifier(_)) = self.cur {
+            if let Some(Token::Punctuation('{')) = self.peek() {
                 return Expr::Instance(self.parse_instance());
             }
         }
