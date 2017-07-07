@@ -81,7 +81,7 @@ impl<'a> Parser<'a> {
     fn peek(&mut self) -> Option<&'a Token> {
         while let Some(token) = self.next_token() {
             self.buffer.push_back(token);
-            if token.is_whitespace() {
+            if !token.is_whitespace() {
                 return Some(token);
             }
         }
