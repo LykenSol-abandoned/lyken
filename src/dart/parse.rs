@@ -112,11 +112,7 @@ impl<'a> Parser<'a> {
                 }
             }
             code.push(token.clone());
-            if let Some(token) = self.buffer.pop_front() {
-                self.cur = Some(token);
-            } else {
-                self.cur = self.tokens.next();
-            }
+            self.cur = self.next_token()
         }
         stringify(&code)
     }
