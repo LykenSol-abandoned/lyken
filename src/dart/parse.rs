@@ -1,4 +1,4 @@
-use dart::dsl::*;
+use dsl::*;
 use dart::lex::{Token, stringify};
 use syntax::symbol::Symbol;
 use std::collections::VecDeque;
@@ -121,8 +121,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_type(&mut self) -> Type {
-        let ty = self.parse_dart();
-        Type { dart: ty }
+        Type::Verbatim(Language::Dart, self.parse_dart())
     }
 
     fn parse_expr(&mut self) -> Expr {
@@ -131,7 +130,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                 return Expr::Instance(self.parse_instance());
             }
         }
-        Expr::VerbatimDart(self.parse_dart())
+        Expr::Verbatim(Language::Dart, self.parse_dart())
     }
 
     fn parse_field(&mut self) -> Field {
@@ -209,7 +208,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             assert!(self.eat_punctuation('{'));
             let dart = self.parse_dart();
             assert!(self.eat_punctuation('}'));
-            Item::VerbatimDart(dart)
+            Item::Verbatim(Language::Dart, dart)
         } else {
             panic!("unknown item");
         }
