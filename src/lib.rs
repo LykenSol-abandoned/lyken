@@ -5,7 +5,8 @@ extern crate syntax;
 
 pub mod dart {
     pub mod codegen;
-    pub mod dsl;
     pub mod lex;
     pub mod parse;
 }
+
+pub mod dsl;

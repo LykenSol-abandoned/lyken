@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 use std::io;
-use dart::dsl::*;
+use dsl::*;
 
 pub struct Codegen<'a> {
     out: &'a mut Write,
@@ -41,7 +41,7 @@ impl<'a> Codegen<'a> {
                 writeln!(self.out, "}}")?;
                 writeln!(self.out, "}}")
             }
-            Item::VerbatimDart(ref dart) => writeln!(self.out, "{}", dart),
+            Item::Verbatim(Language::Dart, ref dart) => writeln!(self.out, "{}", dart),
         }
     }
 
@@ -55,7 +55,8 @@ impl<'a> Codegen<'a> {
     fn codegen_field_def(&mut self, field: &FieldDef) -> io::Result<()> {
         write!(self.out, "final")?;
         if let Some(ref ty) = field.ty {
-            write!(self.out, " {}", ty.dart)?;
+            write!(self.out, " ")?;
+            self.codegen_type(ty)?;
         }
         writeln!(self.out, " {};", field.name)
     }
@@ -69,7 +70,13 @@ impl<'a> Codegen<'a> {
     fn codegen_expr(&mut self, expr: &Expr) -> io::Result<()> {
         match *expr {
             Expr::Instance(ref instance) => self.codegen_instance(&instance),
-            Expr::VerbatimDart(ref dart) => write!(self.out, "{}", dart),
+            Expr::Verbatim(Language::Dart, ref dart) => write!(self.out, "{}", dart),
+        }
+    }
+
+    fn codegen_type(&mut self, ty: &Type) -> io::Result<()> {
+        match *ty {
+            Type::Verbatim(Language::Dart, ref dart) => write!(self.out, "{}", dart),
         }
     }
 

@@ -2,7 +2,7 @@ use syntax::symbol::Symbol;
 
 pub enum Item {
     ComponentDef(Symbol, Vec<FieldDef>, Instance),
-    VerbatimDart(String),
+    Verbatim(Language, String),
 }
 
 pub struct Instance {
@@ -21,11 +21,15 @@ pub struct Field {
     pub value: Expr,
 }
 
-pub struct Type {
-    pub dart: String,
+pub enum Type {
+    Verbatim(Language, String),
 }
 
 pub enum Expr {
     Instance(Instance),
-    VerbatimDart(String),
+    Verbatim(Language, String),
+}
+
+pub enum Language {
+    Dart
 }
