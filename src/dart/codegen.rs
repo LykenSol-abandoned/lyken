@@ -37,7 +37,9 @@ impl<'a> Codegen<'a> {
                 }
                 writeln!(self.out, "@override")?;
                 writeln!(self.out, "Widget build(BuildContext context) {{")?;
+                write!(self.out, "return ")?;
                 self.codegen_instance(instance)?;
+                writeln!(self.out, ";")?;
                 writeln!(self.out, "}}")?;
                 writeln!(self.out, "}}")
             }
