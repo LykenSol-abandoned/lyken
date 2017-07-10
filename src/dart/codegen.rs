@@ -70,6 +70,14 @@ impl<'a> Codegen<'a> {
     fn codegen_expr(&mut self, expr: &Expr) -> io::Result<()> {
         match *expr {
             Expr::Instance(ref instance) => self.codegen_instance(&instance),
+            Expr::Array(ref exprs) => {
+                writeln!(self.out, "[")?;
+                for expr in exprs {
+                    self.codegen_expr(expr)?;
+                    writeln!(self.out, ",")?;
+                }
+                write!(self.out, "]")
+            }
             Expr::Verbatim(Language::Dart, ref dart) => write!(self.out, "{}", dart),
         }
     }
