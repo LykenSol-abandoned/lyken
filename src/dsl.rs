@@ -27,6 +27,7 @@ pub enum Type {
 
 pub enum Expr {
     Instance(Instance),
+    Array(Vec<Expr>),
     Verbatim(Language, String),
 }
 

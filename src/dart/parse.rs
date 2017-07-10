@@ -130,6 +130,17 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                 return Expr::Instance(self.parse_instance());
             }
         }
+        if self.eat_punctuation('[') {
+            let mut exprs = vec![];
+            while !self.is_punctuation(']') {
+                exprs.push(self.parse_expr());
+                if !self.eat_punctuation(',') {
+                    break;
+                }
+            }
+            assert!(self.eat_punctuation(']'));
+            return Expr::Array(exprs);
+        }
         Expr::Verbatim(Language::Dart, self.parse_dart())
     }
 
