@@ -8,6 +8,7 @@ use std::io::prelude::*;
 use difference::Changeset;
 use lyken::dart::lex::*;
 use std::env;
+use std::fmt::Write;
 
 fn main() {
     let mut src = String::new();
@@ -19,7 +20,10 @@ fn main() {
             file.read_to_string(&mut src).unwrap();
             match Lexer::new(&src).tokenize() {
                 Ok(tokens) => {
-                    let result = stringify(&tokens);
+                    let mut result = String::new();
+                    for token in tokens {
+                        write!(result, "{}", token).unwrap();
+                    }
                     if result != src {
                         let diff = Changeset::new(&src, &result, " ");
                         println!("{} {}", entry.path().display(), diff);

@@ -1,8 +1,9 @@
 use syntax::symbol::Symbol;
+use dart::lex::Token;
 
 pub enum Item {
     ComponentDef(Symbol, Vec<FieldDef>, Instance),
-    Verbatim(Language, String),
+    Verbatim(Language, Vec<Token>),
 }
 
 pub struct Instance {
@@ -22,15 +23,15 @@ pub struct Field {
 }
 
 pub enum Type {
-    Verbatim(Language, String),
+    Verbatim(Language, Vec<Token>),
 }
 
 pub enum Expr {
     Instance(Instance),
     Array(Vec<Expr>),
-    Verbatim(Language, String),
+    Verbatim(Language, Vec<Token>),
 }
 
 pub enum Language {
-    Dart
+    Dart,
 }

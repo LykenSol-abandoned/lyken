@@ -1,5 +1,5 @@
 use dsl::*;
-use dart::lex::{Token, stringify};
+use dart::lex::Token;
 use syntax::symbol::Symbol;
 use std::collections::VecDeque;
 
@@ -97,7 +97,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         ident
     }
 
-    fn parse_dart(&mut self) -> String {
+    fn parse_dart(&mut self) -> Vec<Token> {
         let mut depth = 0;
         let mut code = vec![];
         while let Some(token) = self.cur {
@@ -117,7 +117,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             code.push(token);
             self.cur = self.next_token();
         }
-        stringify(&code)
+        code
     }
 
     fn parse_type(&mut self) -> Type {
