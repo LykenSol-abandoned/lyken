@@ -17,7 +17,10 @@ fn main() {
         Ok(tokens) => {
             let items = Parser::new(tokens.iter().cloned()).parse_items();
             let mut out = File::create(path.with_extension("dart")).unwrap();
-            Codegen::new(&mut out).codegen_items(&items).unwrap();
+            let result = Codegen::new().codegen_items(&items);
+            for token in result {
+                write!(out, "{}", token).unwrap();
+            }
         }
         Err(error) => {
             println!("{}:{} {:?}", path.display(), error.line, error.err);

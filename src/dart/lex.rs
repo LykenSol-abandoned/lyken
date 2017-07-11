@@ -1,6 +1,7 @@
 use unicode_xid::UnicodeXID;
 use std::str;
 use syntax::symbol::Symbol;
+use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Token {
@@ -18,6 +19,47 @@ pub enum Token {
     },
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Token::WhiteSpace(s) |
+            Token::IntegerLiteral(s) |
+            Token::Identifier(s) => write!(f, "{}", s),
+            Token::Punctuation(c) => write!(f, "{}", c),
+            Token::StringLiteral {
+                contents,
+                raw,
+                triple,
+                quote,
+                interpolation_before,
+                interpolation_after,
+            } => {
+                if raw {
+                    write!(f, "r")?;
+                }
+                if interpolation_before {
+                    write!(f, "}}")?;
+                } else {
+                    if triple {
+                        write!(f, "{}{}", quote, quote)?;
+                    }
+                    write!(f, "{}", quote)?;
+                }
+                write!(f, "{}", &contents.as_str())?;
+                if interpolation_after {
+                    write!(f, "${{")?;
+                } else {
+                    write!(f, "{}", quote)?;
+                    if triple {
+                        write!(f, "{}{}", quote, quote)?;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 impl Token {
     pub fn as_ident(&self) -> Option<Symbol> {
         if let Token::Identifier(ident) = *self {
@@ -30,7 +72,7 @@ impl Token {
     pub fn is_whitespace(&self) -> bool {
         match *self {
             Token::WhiteSpace(_) => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -42,6 +84,7 @@ pub enum Error {
     UnhandledCharacter(char),
 }
 
+#[derive(Debug)]
 pub struct ErrorLocation {
     pub err: Error,
     pub line: usize,
@@ -114,7 +157,9 @@ impl<'a> Lexer<'a> {
                     buffer.push(self.c);
                     bump!(or self.tokens.push(Token::IntegerLiteral(Symbol::intern(&buffer))));
                 }
-                self.tokens.push(Token::IntegerLiteral(Symbol::intern(&buffer)));
+                self.tokens.push(
+                    Token::IntegerLiteral(Symbol::intern(&buffer)),
+                );
             } else if self.c.is_whitespace() {
                 while self.c.is_whitespace() {
                     buffer.push(self.c);
@@ -189,13 +234,13 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     Some(&Token::StringLiteral {
-                        ref contents,
-                        raw: prev_raw,
-                        triple: false,
-                        quote: prev_quote,
-                        interpolation_after: false,
-                        interpolation_before: false,
-                    }) => {
+                             ref contents,
+                             raw: prev_raw,
+                             triple: false,
+                             quote: prev_quote,
+                             interpolation_after: false,
+                             interpolation_before: false,
+                         }) => {
                         if contents.as_str().is_empty() && prev_quote == quote {
                             triple = true;
                             raw = prev_raw;
@@ -265,48 +310,4 @@ impl<'a> Lexer<'a> {
             }
         }
     }
-}
-
-pub fn stringify(tokens: &[Token]) -> String {
-    let mut text = String::new();
-    for token in tokens {
-        match *token {
-            Token::WhiteSpace(s) |
-            Token::IntegerLiteral(s) |
-            Token::Identifier(s) => text.push_str(&s.as_str()),
-            Token::Punctuation(c) => text.push(c),
-            Token::StringLiteral {
-                contents,
-                raw,
-                triple,
-                quote,
-                interpolation_before,
-                interpolation_after,
-            } => {
-                if raw {
-                    text.push('r');
-                }
-                if interpolation_before {
-                    text.push('}');
-                } else {
-                    if triple {
-                        text.push(quote);
-                        text.push(quote);
-                    }
-                    text.push(quote);
-                }
-                text.push_str(&contents.as_str());
-                if interpolation_after {
-                    text.push_str("${");
-                } else {
-                    text.push(quote);
-                    if triple {
-                        text.push(quote);
-                        text.push(quote);
-                    }
-                }
-            }
-        }
-    }
-    text
 }
