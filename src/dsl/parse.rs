@@ -4,6 +4,7 @@ use dsl::ast::*;
 use dart::lex::Token;
 use syntax::symbol::Symbol;
 use syntax::codemap::Span;
+use dart;
 
 #[derive(Clone)]
 pub struct Parser<I> {
@@ -43,12 +44,14 @@ macro_rules! expected {
 }
 
 impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
-    pub fn new(mut tokens: I) -> Self {
-        Parser {
-            cur: tokens.next().map(|(_, t)| t),
-            tokens: tokens,
+    pub fn new(tokens: I) -> Self {
+        let mut parser = Parser {
+            tokens,
+            cur: None,
             cur_span: Span::default(),
-        }
+        };
+        parser.bump();
+        parser
     }
 
     fn out_of_tokens(&self) -> bool {
@@ -89,14 +92,6 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
 
     fn eat_keyword(&mut self, s: &'static str) -> bool {
         self.expect_keyword(s).is_ok()
-    }
-
-    fn next_token(&mut self) -> Option<Token> {
-        if let Some(token) = self.tokens.next().map(|(_, t)| t) {
-            Some(token)
-        } else {
-            None
-        }
     }
 
     fn bump_raw(&mut self) {
@@ -144,7 +139,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(ident)
     }
 
-    fn parse_dart(&mut self) -> ParseResult<Vec<Token>> {
+    fn parse_dart(&mut self) -> ParseResult<Vec<(Span, Token)>> {
         let mut depth = 0;
         let mut code = vec![];
         while let Some(token) = self.cur {
@@ -161,14 +156,19 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     _ => {}
                 }
             }
-            code.push(token);
-            self.cur = self.next_token();
+            code.push((self.cur_span, token));
+            self.bump_raw();
         }
         Ok(code)
     }
 
     fn parse_type(&mut self) -> ParseResult<Type> {
-        Ok(Type::Dart(self.parse_dart()?))
+        let dart = self.parse_dart()?;
+        Ok(Type::Dart(
+            dart::parse::Parser::new(dart.iter().cloned())
+                .parse_type()
+                .unwrap(),
+        ))
     }
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
@@ -192,7 +192,12 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             self.expect_punctuation(']')?;
             return Ok(Expr::Array(exprs));
         }
-        Ok(Expr::Dart(self.parse_dart()?))
+        let dart = self.parse_dart()?;
+        Ok(Expr::Dart(
+            dart::parse::Parser::new(dart.iter().cloned())
+                .parse_expr()
+                .unwrap(),
+        ))
     }
 
     fn parse_field(&mut self) -> ParseResult<Field> {
@@ -227,8 +232,11 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         };
         if self.eat_punctuation(':') {
             fd.ty = Some(self.parse_type()?);
-        }
-        if self.eat_punctuation('=') {
+            if self.eat_punctuation('=') {
+                fd.default = Some(self.parse_expr()?);
+            }
+        } else {
+            self.expect_punctuation('=')?;
             fd.default = Some(self.parse_expr()?);
         }
         Ok(fd)
@@ -236,12 +244,8 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
 
     fn parse_field_defs(&mut self) -> ParseResult<Vec<FieldDef>> {
         let mut fields = vec![];
-        while !self.out_of_tokens() {
-            if self.is_punctuation('}') {
-                break;
-            } else {
-                fields.push(self.parse_field_def()?);
-            }
+        while let Some(field) = self.try(|p| p.parse_field_def()) {
+            fields.push(field);
             self.expect_punctuation(',')?;
         }
         Ok(fields)
@@ -268,7 +272,8 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             self.expect_punctuation('{')?;
             let dart = self.parse_dart()?;
             self.expect_punctuation('}')?;
-            Ok(Item::Dart(dart))
+            let mut parser = dart::parse::Parser::new(dart.iter().cloned());
+            Ok(Item::Dart(parser.parse_items().unwrap()))
         } else {
             expected!(self, Item);
         }

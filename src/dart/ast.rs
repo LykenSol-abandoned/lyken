@@ -148,7 +148,16 @@ pub struct Qualified {
     pub name: Symbol,
 }
 
-#[derive(Debug)]
+impl Qualified {
+    pub fn simple(name: &str) -> Qualified {
+        Qualified {
+            prefix: None,
+            name: Symbol::intern(name),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum UnOp {
     Neg,
     Not,
@@ -274,6 +283,12 @@ pub enum Type {
     Infer,
 }
 
+impl Type {
+    pub fn simple_path(name: &str) -> Node<Type> {
+        Node::new(Type::Path(Qualified::simple(name), vec![]))
+    }
+}
+
 #[derive(Debug)]
 pub enum Expr {
     Unary(UnOp, Node<Expr>),
@@ -357,6 +372,16 @@ pub struct MetadataItem {
     pub arguments: Option<Args>,
 }
 
+impl MetadataItem {
+    pub fn simple(name: &str) -> MetadataItem {
+        MetadataItem {
+            qualified: Qualified::simple(name),
+            suffix: None,
+            arguments: None,
+        }
+    }
+}
+
 pub type Metadata = Vec<MetadataItem>;
 
 #[derive(Debug)]
@@ -408,6 +433,21 @@ pub struct ArgDef {
     pub ty: VarType,
     pub field: bool,
     pub name: Symbol,
+}
+
+impl ArgDef {
+    pub fn simple(ty: Node<Type>, name: &str) -> ArgDef {
+        ArgDef {
+            metadata: vec![],
+            covariant: false,
+            ty: VarType {
+                fcv: FinalConstVar::Var,
+                ty,
+            },
+            field: false,
+            name: Symbol::intern(name),
+        }
+    }
 }
 
 #[derive(Debug)]
