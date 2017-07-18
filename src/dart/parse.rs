@@ -1525,13 +1525,13 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(ClassMember::Method(metadata, method_qualifiers, function))
     }
 
-    pub fn parse_item(&mut self) -> ParseResult<Item> {
+    fn parse_item(&mut self) -> ParseResult<Node<Item>> {
         let metadata = self.parse_metadata()?;
 
         if self.eat_keyword("library") {
             let path = self.parse_one_or_more('.', |p| p.parse_ident())?;
             self.expect_punctuation(';')?;
-            return Ok(Item::LibraryName { metadata, path });
+            return Ok(Node::new(Item::LibraryName { metadata, path }));
         }
 
         if self.eat_keyword("import") {
@@ -1548,7 +1548,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             };
             let filters = self.parse_import_filters()?;
             self.expect_punctuation(';')?;
-            return Ok(Item::Import(
+            return Ok(Node::new(Item::Import(
                 metadata,
                 Import {
                     uri,
@@ -1556,7 +1556,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     as_ident,
                     filters,
                 },
-            ));
+            )));
         }
 
         if !self.probe(|p| {
@@ -1567,18 +1567,18 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             let uri = self.parse_string_literal()?;
             let import_filters = self.parse_import_filters()?;
             self.expect_punctuation(';')?;
-            return Ok(Item::Export(metadata, uri, import_filters));
+            return Ok(Node::new(Item::Export(metadata, uri, import_filters)));
         }
 
         if self.eat_keyword("part") {
             if self.eat_keyword("of") {
                 let path = self.parse_one_or_more('.', |p| p.parse_ident())?;
                 self.expect_punctuation(';')?;
-                return Ok(Item::PartOf { metadata, path });
+                return Ok(Node::new(Item::PartOf { metadata, path }));
             }
             let uri = self.parse_string_literal()?;
             self.expect_punctuation(';')?;
-            return Ok(Item::Part { metadata, uri });
+            return Ok(Node::new(Item::Part { metadata, uri }));
         }
 
         let _external = self.eat_keyword("external");
@@ -1614,7 +1614,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     }
                     members.push(self.parse_class_member(class_name)?);
                 }
-                return Ok(Item::Class {
+                return Ok(Node::new(Item::Class {
                     metadata,
                     abstract_,
                     name: class_name,
@@ -1623,7 +1623,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     mixins,
                     interfaces,
                     members,
-                });
+                }));
             } else {
                 self.expect_punctuation('=')?;
                 let mut mixins = vec![self.parse_type()?];
@@ -1635,14 +1635,14 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     vec![]
                 };
                 self.expect_punctuation(';')?;
-                return Ok(Item::MixinClass {
+                return Ok(Node::new(Item::MixinClass {
                     metadata,
                     abstract_,
                     name: class_name,
                     generics,
                     mixins,
                     interfaces,
-                });
+                }));
             }
         }
 
@@ -1659,11 +1659,11 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     break;
                 }
             }
-            return Ok(Item::Enum {
+            return Ok(Node::new(Item::Enum {
                 metadata,
                 name: enum_name,
                 values,
-            });
+            }));
         }
 
         if self.eat_keyword("typedef") {
@@ -1680,12 +1680,12 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             let sig = self.parse_fn_args(return_type)?;
             let ty = Node::new(Type::FunctionOld(sig));
             self.expect_punctuation(';')?;
-            return Ok(Item::TypeAlias {
+            return Ok(Node::new(Item::TypeAlias {
                 metadata,
                 name,
                 generics,
                 ty,
-            });
+            }));
         }
 
         self.try(|p| {
@@ -1693,9 +1693,11 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             let names_and_initializers =
                 p.parse_one_or_more(',', |p| p.parse_name_and_initializer())?;
             p.expect_punctuation(';')?;
-            Ok(Item::Global(var_type, names_and_initializers))
+            Ok(Node::new(Item::Global(var_type, names_and_initializers)))
         }).ok_or(())
-            .or_else(|_| Ok(Item::Function(self.parse_function(false)?)))
+            .or_else(|_| {
+                Ok(Node::new(Item::Function(self.parse_function(false)?)))
+            })
     }
 
     fn parse_import_filters(&mut self) -> ParseResult<Vec<ImportFilter>> {
@@ -1767,7 +1769,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
     }
 
-    pub fn parse_items(&mut self) -> ParseResult<Vec<Item>> {
+    pub fn parse_items(&mut self) -> ParseResult<Vec<Node<Item>>> {
         let mut items = vec![];
         while !self.out_of_tokens() {
             items.push(self.parse_item()?);

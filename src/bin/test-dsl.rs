@@ -2,13 +2,14 @@
 
 extern crate lyken;
 
+use std::env;
+use std::path::PathBuf;
 use std::fs::File;
 use std::io::prelude::*;
 use lyken::dart::lex::*;
 use lyken::dsl::parse::*;
 use lyken::dart::codegen::*;
-use std::env;
-use std::path::PathBuf;
+use lyken::dart::print::Printer;
 
 fn main() {
     let path = PathBuf::from(env::args().nth(1).unwrap());
@@ -17,7 +18,8 @@ fn main() {
         Ok(tokens) => match Parser::new(tokens.iter().cloned()).parse_items() {
             Ok(items) => {
                 let mut out = File::create(path.with_extension("dart")).unwrap();
-                let result = Codegen::new().codegen_items(&items);
+                let code = Codegen::new().codegen_items(&items);
+                let result = Printer::new().print_items(&code);
                 for token in result {
                     write!(out, "{}", token).unwrap();
                 }

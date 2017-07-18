@@ -1,129 +1,219 @@
 use dsl::ast::*;
-use dart::lex::{Lexer, Token};
+use dart::ast;
 use syntax::symbol::Symbol;
+use node::Node;
 
-pub struct Codegen {
-    tokens: Vec<Token>,
-}
+pub struct Codegen {}
 
 impl Codegen {
     pub fn new() -> Self {
-        Codegen { tokens: vec![] }
+        Codegen {}
     }
 
-    fn write_str(&mut self, string: &str) {
-        let fm = ::codemap().new_filemap(String::new(), string.to_string());
-        self.tokens.extend(
-            Lexer::new(::mk_sp(fm.start_pos, fm.end_pos))
-                .tokenize()
-                .unwrap()
-                .into_iter()
-                .map(|(_, t)| t),
-        );
+    pub fn codegen_items(&mut self, items: &[Item]) -> Vec<Node<ast::Item>> {
+        items
+            .iter()
+            .flat_map(|item| self.codegen_item(item))
+            .collect()
     }
 
-    fn write_ident(&mut self, ident: &Symbol) {
-        self.tokens.push(Token::Identifier(*ident));
-    }
-
-    pub fn codegen_items(mut self, items: &[Item]) -> Vec<Token> {
-        for item in items {
-            self.codegen_item(item);
-        }
-        self.tokens
-    }
-
-    fn codegen_item(&mut self, item: &Item) {
+    fn codegen_item(&mut self, item: &Item) -> Vec<Node<ast::Item>> {
         match *item {
-            Item::ComponentDef(ref name, ref fields, ref instance) => {
-                self.write_str("class ");
-                self.write_ident(name);
-                self.write_str(" extends StatelessWidget {\n");
+            Item::ComponentDef(name, ref fields, ref instance) => {
+                let params;
+                let body;
+                let superclass;
+                let mut class_members = vec![];
+                superclass = Some(ast::Type::simple_path("StatelessWidget"));
                 if !fields.is_empty() {
-                    self.write_str("const ");
-                    self.write_ident(name);
-                    self.write_str("({ Key key");
+                    let mut normal = vec![];
+                    let mut default = vec![];
+                    normal.push(ast::ArgDef::simple(ast::Type::simple_path("Key"), "key"));
+
                     for field in fields {
-                        self.write_str(", this.");
-                        self.write_ident(&field.name);
+                        let mut var_ty = Node::new(ast::Type::Infer);
+                        if let Some(ref ty) = field.ty {
+                            var_ty = self.codegen_type(ty);
+                        }
+                        let arg = ast::ArgDef {
+                            metadata: vec![],
+                            covariant: false,
+                            ty: ast::VarType {
+                                fcv: ast::FinalConstVar::Var,
+                                ty: var_ty,
+                            },
+                            field: true,
+                            name: field.name,
+                        };
                         if let Some(ref value) = field.default {
-                            self.write_str(" = ");
-                            self.codegen_expr(value);
+                            default.push(ast::OptionalArgDef {
+                                arg,
+                                default: Some(self.codegen_expr(value)),
+                            });
+                        } else {
+                            normal.push(arg);
                         }
                     }
-                    self.write_str(" }) : super(key: key);\n");
-                    self.codegen_field_defs(fields);
+                    params = ast::FnSig {
+                        return_type: Node::new(ast::Type::Infer),
+                        required: normal,
+                        optional: default,
+                        optional_kind: ast::OptionalArgKind::Named,
+                        async: false,
+                        generator: false,
+                    };
+                    class_members.push(ast::ClassMember::Constructor {
+                        metadata: vec![],
+                        method_qualifiers: vec![ast::MethodQualifiers::Const],
+                        name: Some(name),
+                        sig: params,
+                        initializers: vec![
+                            ast::ConstructorInitializer::Super(
+                                None,
+                                ast::Args {
+                                    unnamed: vec![],
+                                    named: vec![
+                                        ast::NamedArg {
+                                            name: Symbol::intern("key"),
+                                            expr: Node::new(
+                                                ast::Expr::Identifier(Symbol::intern("key")),
+                                            ),
+                                        },
+                                    ],
+                                },
+                            ),
+                        ],
+                        function_body: None,
+                    });
                 }
-                self.write_str("@override\n");
-                self.write_str("Widget build(BuildContext context) {\n");
-                self.write_str("return ");
-                self.codegen_instance(instance);
-                self.write_str(";\n");
-                self.write_str("}\n");
-                self.write_str("}\n");
+
+                class_members.extend(self.codegen_field_defs(fields));
+                body = Some(ast::FnBody::Block(Node::new(ast::Statement::Block(vec![
+                    Node::new(ast::Statement::Return(
+                        Some(self.codegen_instance(instance)),
+                    )),
+                ]))));
+                class_members.push(ast::ClassMember::Method(
+                    vec![ast::MetadataItem::simple("override")],
+                    vec![],
+                    ast::Function {
+                        name: ast::FnName::Regular(Symbol::intern("build")),
+                        generics: vec![],
+                        sig: ast::FnSig {
+                            return_type: ast::Type::simple_path("Widget"),
+                            required: vec![
+                                ast::ArgDef::simple(
+                                    ast::Type::simple_path("BuildContext"),
+                                    "context",
+                                ),
+                            ],
+                            optional: vec![],
+                            optional_kind: ast::OptionalArgKind::Named,
+                            async: false,
+                            generator: false,
+                        },
+                        body,
+                    },
+                ));
+                vec![
+                    Node::new(ast::Item::Class {
+                        metadata: vec![],
+                        abstract_: false,
+                        name,
+                        generics: vec![],
+                        superclass,
+                        mixins: vec![],
+                        interfaces: vec![],
+                        members: class_members,
+                    }),
+                ]
+
             }
-            Item::Dart(ref dart) => {
-                self.tokens.extend(dart);
-                self.write_str("\n");
-            }
+            Item::Dart(ref items) => items.clone(),
         }
     }
 
-    fn codegen_field_defs(&mut self, fields: &[FieldDef]) {
-        for field in fields {
-            self.codegen_field_def(field);
-        }
+    fn codegen_field_defs(&mut self, fields: &[FieldDef]) -> Vec<ast::ClassMember> {
+        fields
+            .iter()
+            .map(|field| self.codegen_field_def(field))
+            .collect()
     }
 
-    fn codegen_field_def(&mut self, field: &FieldDef) {
-        self.write_str("final ");
+    fn codegen_field_def(&mut self, field: &FieldDef) -> ast::ClassMember {
+        let mut var_ty = Node::new(ast::Type::Infer);
+        let mut var_expr = None;
         if let Some(ref ty) = field.ty {
-            self.codegen_type(ty);
-            self.write_str(" ");
+            var_ty = self.codegen_type(ty);
         }
-        self.write_ident(&field.name);
-        self.write_str(";\n");
+        if let Some(ref expr) = field.default {
+            var_expr = Some(self.codegen_expr(expr));
+        }
+        ast::ClassMember::Fields {
+            metadata: vec![],
+            static_: false,
+            var_type: ast::VarType {
+                fcv: ast::FinalConstVar::Final,
+                ty: var_ty,
+            },
+            initializers: vec![
+                ast::NameAndInitializer {
+                    name: field.name,
+                    init: var_expr,
+                },
+            ],
+        }
     }
 
-    fn codegen_field(&mut self, field: &Field) {
-        self.write_ident(&field.name);
-        self.write_str(": ");
-        self.codegen_expr(&field.value);
-        self.write_str(",\n");
+    fn codegen_field(&mut self, field: &Field) -> ast::NamedArg {
+        ast::NamedArg {
+            name: field.name,
+            expr: self.codegen_expr(&field.value),
+        }
     }
 
-    fn codegen_expr(&mut self, expr: &Expr) {
+    fn codegen_expr(&mut self, expr: &Expr) -> Node<ast::Expr> {
         match *expr {
             Expr::Instance(ref instance) => self.codegen_instance(&instance),
             Expr::Array(ref exprs) => {
-                self.write_str("[\n");
-                for expr in exprs {
-                    self.codegen_expr(expr);
-                    self.write_str(",\n");
-                }
-                self.write_str("]");
+                let elements = exprs.iter().map(|expr| self.codegen_expr(expr)).collect();
+                Node::new(ast::Expr::List {
+                    const_: false,
+                    element_ty: None,
+                    elements,
+                })
             }
-            Expr::Dart(ref dart) => {
-                self.tokens.extend(dart);
-            }
+            Expr::Dart(ref dart) => dart.clone(),
         }
+
     }
 
-    fn codegen_type(&mut self, ty: &Type) {
+    fn codegen_type(&mut self, ty: &Type) -> Node<ast::Type> {
         match *ty {
-            Type::Dart(ref dart) => {
-                self.tokens.extend(dart);
-            }
+            Type::Dart(ref dart) => dart.clone(),
         }
     }
 
-    fn codegen_instance(&mut self, instance: &Instance) {
-        self.write_str("new ");
-        self.write_ident(&instance.name);
-        self.write_str("(\n");
-        for field in &instance.fields {
-            self.codegen_field(field);
-        }
-        self.write_str(")");
+    fn codegen_instance(&mut self, instance: &Instance) -> Node<ast::Expr> {
+        let args = instance
+            .fields
+            .iter()
+            .map(|field| self.codegen_field(field))
+            .collect();
+        Node::new(ast::Expr::New {
+            const_: false,
+            ty: Node::new(ast::Type::Path(
+                ast::Qualified {
+                    prefix: None,
+                    name: instance.name,
+                },
+                vec![],
+            )),
+            ctor: None,
+            args: ast::Args {
+                unnamed: vec![],
+                named: args,
+            },
+        })
     }
 }

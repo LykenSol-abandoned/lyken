@@ -1,9 +1,10 @@
 use syntax::symbol::Symbol;
-use dart::lex::Token;
+use dart;
+use node::Node;
 
 pub enum Item {
     ComponentDef(Symbol, Vec<FieldDef>, Instance),
-    Dart(Vec<Token>),
+    Dart(Vec<Node<dart::ast::Item>>),
 }
 
 pub struct Instance {
@@ -23,11 +24,11 @@ pub struct Field {
 }
 
 pub enum Type {
-    Dart(Vec<Token>),
+    Dart(Node<dart::ast::Type>),
 }
 
 pub enum Expr {
     Instance(Instance),
     Array(Vec<Expr>),
-    Dart(Vec<Token>),
+    Dart(Node<dart::ast::Expr>),
 }
