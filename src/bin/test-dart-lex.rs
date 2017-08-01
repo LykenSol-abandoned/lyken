@@ -6,7 +6,7 @@ use walkdir::WalkDir;
 use std::fs::File;
 use std::io::prelude::*;
 use difference::Changeset;
-use lyken::dart::lex::*;
+use lyken::dart::lex::Lexer;
 use std::env;
 use std::fmt::Write;
 
