@@ -3,7 +3,7 @@ extern crate lyken;
 use std::fs::File;
 use std::io::prelude::*;
 use lyken::dart::lex::*;
-use lyken::dart::parse::*;
+use lyken::dsl::parse::*;
 use lyken::dart::codegen::*;
 use std::env;
 use std::path::PathBuf;

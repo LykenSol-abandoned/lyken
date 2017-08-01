@@ -1,4 +1,4 @@
-use dsl::*;
+use dsl::ast::*;
 use dart::lex::Token;
 use syntax::symbol::Symbol;
 use std::collections::VecDeque;
