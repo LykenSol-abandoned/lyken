@@ -1,4 +1,4 @@
-use dsl::*;
+use dsl::ast::*;
 use dart::lex::{Lexer, Token};
 use syntax::symbol::Symbol;
 
