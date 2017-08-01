@@ -11,10 +11,12 @@ fn all_dsl() {
             Command::new("cargo")
                 .args(&["run", "--bin", "test-dsl"])
                 .arg(entry.path())
-                .status().unwrap();
+                .status()
+                .unwrap();
         }
     }
     Command::new("cargo")
-        .args(&["run", "--bin", "lex-dart", "tests"])
-        .status().unwrap();
+        .args(&["run", "--bin", "test-dart-lex", "tests"])
+        .status()
+        .unwrap();
 }
