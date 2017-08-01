@@ -1,3 +1,4 @@
+use unicode_width::UnicodeWidthChar;
 use unicode_xid::UnicodeXID;
 use std::str;
 use syntax::symbol::Symbol;
@@ -75,10 +76,58 @@ impl Token {
             _ => false,
         }
     }
+
+    pub fn advance_src_pos(&self, line: &mut usize, col: &mut usize) {
+        match *self {
+            Token::WhiteSpace(s) |
+            Token::IntegerLiteral(s) |
+            Token::Identifier(s) => {
+                for c in s.as_str().chars() {
+                    *col += UnicodeWidthChar::width(c).unwrap_or(1);
+                    if c == '\n' {
+                        *col = 1;
+                        *line += 1;
+                    }
+                }
+            }
+            Token::Punctuation(c) => *col += UnicodeWidthChar::width(c).unwrap_or(1),
+            Token::StringLiteral {
+                contents,
+                raw,
+                triple,
+                quote: _,
+                interpolation_before,
+                interpolation_after,
+            } => {
+                if raw {
+                    *col += 1;
+                }
+                if interpolation_before {
+                    *col += 1;
+                } else {
+                    *col += 1 + 2 * triple as usize;
+                }
+                for c in contents.as_str().chars() {
+                    *col += UnicodeWidthChar::width(c).unwrap_or(1);
+                    if c == '\n' {
+                        *col = 1;
+                        *line += 1;
+                    }
+                }
+                if interpolation_after {
+                    *col += 2;
+                } else {
+                    *col += 1 + 2 * triple as usize;
+                }
+            }
+        }
+
+    }
 }
 
 #[derive(Debug)]
 pub enum Error {
+    UnterminatedShebang,
     UnterminatedStringLiteral,
     UnterminatedBlockComment { start: usize },
     UnhandledCharacter(char),
@@ -138,6 +187,21 @@ impl<'a> Lexer<'a> {
             ($e:expr) => (Err(ErrorLocation { err: $e, line: self.line })?)
         }
         bump!();
+
+        if self.c == '#' {
+            bump!(or emit!(Error::UnterminatedShebang));
+            if self.c != '!' {
+                emit!(Error::UnterminatedShebang);
+            }
+            bump!(or emit!(Error::UnterminatedShebang));
+            let mut buffer = String::from("#!");
+            while self.c != '\n' {
+                buffer.push(self.c);
+                bump!(or self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer))));
+            }
+            self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer)));
+        }
+
         loop {
             let mut buffer = String::new();
             let mut interpolation_before = false;
@@ -187,7 +251,7 @@ impl<'a> Lexer<'a> {
                 } else if self.c == '*' {
                     let mut depth = 0;
                     let unterminated = Error::UnterminatedBlockComment { start: self.line };
-                    buffer.push_str("/*");
+                    buffer += "/*";
                     bump!(or emit!(unterminated));
                     loop {
                         if self.c == '*' {
