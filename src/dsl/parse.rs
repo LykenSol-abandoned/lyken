@@ -121,7 +121,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_type(&mut self) -> Type {
-        Type::Verbatim(Language::Dart, self.parse_dart())
+        Type::Dart(self.parse_dart())
     }
 
     fn parse_expr(&mut self) -> Expr {
@@ -141,7 +141,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             assert!(self.eat_punctuation(']'));
             return Expr::Array(exprs);
         }
-        Expr::Verbatim(Language::Dart, self.parse_dart())
+        Expr::Dart(self.parse_dart())
     }
 
     fn parse_field(&mut self) -> Field {
@@ -219,7 +219,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             assert!(self.eat_punctuation('{'));
             let dart = self.parse_dart();
             assert!(self.eat_punctuation('}'));
-            Item::Verbatim(Language::Dart, dart)
+            Item::Dart(dart)
         } else {
             panic!("unknown item");
         }

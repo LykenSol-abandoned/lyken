@@ -3,7 +3,7 @@ use dart::lex::Token;
 
 pub enum Item {
     ComponentDef(Symbol, Vec<FieldDef>, Instance),
-    Verbatim(Language, Vec<Token>),
+    Dart(Vec<Token>),
 }
 
 pub struct Instance {
@@ -23,15 +23,11 @@ pub struct Field {
 }
 
 pub enum Type {
-    Verbatim(Language, Vec<Token>),
+    Dart(Vec<Token>),
 }
 
 pub enum Expr {
     Instance(Instance),
     Array(Vec<Expr>),
-    Verbatim(Language, Vec<Token>),
-}
-
-pub enum Language {
-    Dart,
+    Dart(Vec<Token>),
 }
