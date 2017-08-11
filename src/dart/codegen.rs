@@ -56,7 +56,7 @@ impl Codegen {
                 self.write_str("}\n");
                 self.write_str("}\n");
             }
-            Item::Verbatim(Language::Dart, ref dart) => {
+            Item::Dart(ref dart) => {
                 self.tokens.extend(dart);
                 self.write_str("\n");
             }
@@ -97,7 +97,7 @@ impl Codegen {
                 }
                 self.write_str("]");
             }
-            Expr::Verbatim(Language::Dart, ref dart) => {
+            Expr::Dart(ref dart) => {
                 self.tokens.extend(dart);
             }
         }
@@ -105,7 +105,7 @@ impl Codegen {
 
     fn codegen_type(&mut self, ty: &Type) {
         match *ty {
-            Type::Verbatim(Language::Dart, ref dart) => {
+            Type::Dart(ref dart) => {
                 self.tokens.extend(dart);
             }
         }
