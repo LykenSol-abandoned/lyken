@@ -10,6 +10,7 @@ pub struct Parser<I> {
     cur: Option<Token>,
     line: usize,
     col: usize,
+    skip_blocks: bool,
 }
 
 error_chain! {
@@ -56,9 +57,15 @@ impl<I: Clone + Iterator<Item = Token>> Parser<I> {
             cur: None,
             line: 1,
             col: 1,
+            skip_blocks: false,
         };
         parser.bump();
         parser
+    }
+
+    pub fn skip_blocks(mut self) -> Self {
+        self.skip_blocks = true;
+        self
     }
 
     fn out_of_tokens(&self) -> bool {
@@ -922,11 +929,27 @@ impl<I: Clone + Iterator<Item = Token>> Parser<I> {
     fn parse_block(&mut self) -> ParseResult<Box<Statement>> {
         self.expect_punctuation('{')?;
         let mut statements = vec![];
-        loop {
-            if self.is_punctuation('}') {
-                break;
+        if self.skip_blocks {
+            let mut depth = 0;
+            while !self.out_of_tokens() {
+                if self.is_punctuation('{') {
+                    depth += 1;
+                }
+                if self.is_punctuation('}') {
+                    if depth == 0 {
+                        break;
+                    }
+                    depth -= 1;
+                }
+                self.bump();
             }
-            statements.push(self.parse_statement()?);
+        } else {
+            loop {
+                if self.is_punctuation('}') {
+                    break;
+                }
+                statements.push(self.parse_statement()?);
+            }
         }
         self.expect_punctuation('}')?;
         Ok(Box::new(Statement::Block(statements)))
