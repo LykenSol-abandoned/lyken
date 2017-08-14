@@ -18,6 +18,7 @@ pub mod dart {
     pub mod codegen;
     pub mod lex;
     pub mod parse;
+    pub mod visit;
 }
 
 pub mod dsl {
