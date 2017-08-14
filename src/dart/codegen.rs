@@ -9,11 +9,17 @@ pub struct Codegen {
 impl Codegen {
     pub fn new() -> Self {
         Codegen { tokens: vec![] }
-
     }
 
     fn write_str(&mut self, string: &str) {
-        self.tokens.extend(Lexer::new(string).tokenize().unwrap());
+        let fm = ::codemap().new_filemap(String::new(), string.to_string());
+        self.tokens.extend(
+            Lexer::new(::mk_sp(fm.start_pos, fm.end_pos))
+                .tokenize()
+                .unwrap()
+                .into_iter()
+                .map(|(_, t)| t),
+        );
     }
 
     fn write_ident(&mut self, ident: &Symbol) {

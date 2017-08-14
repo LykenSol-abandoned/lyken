@@ -1,3 +1,5 @@
+#![feature(rustc_private)]
+
 extern crate lyken;
 
 use std::fs::File;
@@ -10,10 +12,8 @@ use std::path::PathBuf;
 
 fn main() {
     let path = PathBuf::from(env::args().nth(1).unwrap());
-    let mut file = File::open(&path).unwrap();
-    let mut src = String::new();
-    file.read_to_string(&mut src).unwrap();
-    match Lexer::new(&src).tokenize() {
+    let file = lyken::codemap().load_file(&path).unwrap();
+    match Lexer::new(lyken::mk_sp(file.start_pos, file.end_pos)).tokenize() {
         Ok(tokens) => {
             let items = Parser::new(tokens.iter().cloned()).parse_items();
             let mut out = File::create(path.with_extension("dart")).unwrap();
@@ -23,7 +23,7 @@ fn main() {
             }
         }
         Err(error) => {
-            println!("{}:{} {:?}", path.display(), error.line, error.err);
+            println!("{:?}: {:?}", error.span, error.err);
         }
     }
 }

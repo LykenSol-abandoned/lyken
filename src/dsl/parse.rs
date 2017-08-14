@@ -1,6 +1,7 @@
 use dsl::ast::*;
 use dart::lex::Token;
 use syntax::symbol::Symbol;
+use syntax::codemap::Span;
 use std::collections::VecDeque;
 
 pub struct Parser<I> {
@@ -9,10 +10,10 @@ pub struct Parser<I> {
     buffer: VecDeque<Token>,
 }
 
-impl<I: Iterator<Item = Token>> Parser<I> {
+impl<I: Iterator<Item = (Span, Token)>> Parser<I> {
     pub fn new(mut tokens: I) -> Self {
         Parser {
-            cur: tokens.next(),
+            cur: tokens.next().map(|(_, t)| t),
             tokens: tokens,
             buffer: VecDeque::new(),
         }
@@ -41,7 +42,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     fn next_token(&mut self) -> Option<Token> {
         if let Some(token) = self.buffer.pop_front() {
             Some(token)
-        } else if let Some(token) = self.tokens.next() {
+        } else if let Some(token) = self.tokens.next().map(|(_, t)| t) {
             Some(token)
         } else {
             None
@@ -82,7 +83,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                 return Some(token);
             }
         }
-        while let Some(token) = self.tokens.next() {
+        while let Some(token) = self.tokens.next().map(|(_, t)| t) {
             self.buffer.push_back(token);
             if !token.is_whitespace() {
                 return Some(token);
