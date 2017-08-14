@@ -10,6 +10,8 @@ extern crate syntax;
 use syntax::codemap::{CodeMap, FilePathMapping, Span, BytePos, SPAN_DEBUG, NO_EXPANSION};
 use std::rc::Rc;
 
+pub mod node;
+
 pub mod dart {
     pub mod ast;
     pub mod codegen;

@@ -2,6 +2,7 @@ use enum_primitive::FromPrimitive;
 use std::iter;
 use syntax::symbol::Symbol;
 use syntax::codemap::Span;
+use node::Node;
 
 #[derive(Debug)]
 pub enum Item {
@@ -24,9 +25,9 @@ pub enum Item {
         abstract_: bool,
         name: Symbol,
         generics: Vec<TypeParameter>,
-        superclass: Option<Box<Type>>,
-        mixins: Vec<Box<Type>>,
-        interfaces: Vec<Box<Type>>,
+        superclass: Option<Node<Type>>,
+        mixins: Vec<Node<Type>>,
+        interfaces: Vec<Node<Type>>,
         members: Vec<ClassMember>,
     },
     MixinClass {
@@ -34,8 +35,8 @@ pub enum Item {
         abstract_: bool,
         name: Symbol,
         generics: Vec<TypeParameter>,
-        mixins: Vec<Box<Type>>,
-        interfaces: Vec<Box<Type>>,
+        mixins: Vec<Node<Type>>,
+        interfaces: Vec<Node<Type>>,
     },
     Enum {
         metadata: Metadata,
@@ -46,7 +47,7 @@ pub enum Item {
         metadata: Metadata,
         name: Symbol,
         generics: Vec<TypeParameter>,
-        ty: Box<Type>,
+        ty: Node<Type>,
     },
     Function(Function),
     Global(VarType, Vec<NameAndInitializer>),
@@ -81,7 +82,7 @@ pub enum ClassMember {
         method_qualifiers: Vec<MethodQualifiers>,
         name: Option<Symbol>,
         sig: FnSig,
-        ty: Box<Type>,
+        ty: Node<Type>,
     },
     Constructor {
         metadata: Metadata,
@@ -131,14 +132,14 @@ pub enum ConstructorInitializer {
     Super(Option<Symbol>, Args),
     This(Option<Symbol>, Args),
     Assert(Args),
-    Field(bool, Symbol, Box<Expr>),
+    Field(bool, Symbol, Node<Expr>),
 }
 
 #[derive(Debug)]
 pub struct TypeParameter {
     pub metadata: Metadata,
     pub name: Symbol,
-    pub extends: Option<Box<Type>>,
+    pub extends: Option<Node<Type>>,
 }
 
 #[derive(Debug)]
@@ -264,7 +265,7 @@ impl BinOp {
 
 #[derive(Debug)]
 pub enum Type {
-    Path(Qualified, Vec<Box<Type>>),
+    Path(Qualified, Vec<Node<Type>>),
     FunctionOld(FnSig),
     Function(FnSig),
     Infer,
@@ -272,37 +273,37 @@ pub enum Type {
 
 #[derive(Debug)]
 pub enum Expr {
-    Unary(UnOp, Box<Expr>),
-    Binary(BinOp, Box<Expr>, Box<Expr>),
-    Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
-    Is(Box<Expr>, Box<Type>),
-    IsNot(Box<Expr>, Box<Type>),
-    As(Box<Expr>, Box<Type>),
-    Suffix(Box<Expr>, Suffix),
+    Unary(UnOp, Node<Expr>),
+    Binary(BinOp, Node<Expr>, Node<Expr>),
+    Conditional(Node<Expr>, Node<Expr>, Node<Expr>),
+    Is(Node<Expr>, Node<Type>),
+    IsNot(Node<Expr>, Node<Type>),
+    As(Node<Expr>, Node<Type>),
+    Suffix(Node<Expr>, Suffix),
     Identifier(Symbol),
     Closure(FnSig, FnBody),
     New {
         const_: bool,
-        ty: Box<Type>,
+        ty: Node<Type>,
         ctor: Option<Symbol>,
         args: Args,
     },
     List {
         const_: bool,
-        element_ty: Option<Box<Type>>,
-        elements: Vec<Box<Expr>>,
+        element_ty: Option<Node<Type>>,
+        elements: Vec<Node<Expr>>,
     },
     Map {
         const_: bool,
-        kv_ty: Option<(Box<Type>, Box<Type>)>,
-        kv: Vec<(Box<Expr>, Box<Expr>)>,
+        kv_ty: Option<(Node<Type>, Node<Type>)>,
+        kv: Vec<(Node<Expr>, Node<Expr>)>,
     },
     Number(Symbol),
     String(Vec<StringLiteral>),
     Symbol(SymbolLiteral),
-    Paren(Box<Expr>),
-    Throw(Box<Expr>),
-    Cascade(Box<Expr>, Cascade),
+    Paren(Node<Expr>),
+    Throw(Node<Expr>),
+    Cascade(Node<Expr>, Cascade),
 }
 
 #[derive(Debug)]
@@ -317,32 +318,32 @@ pub struct StringLiteral {
     pub triple: bool,
     pub quote: char,
     pub prefix: Span,
-    pub interpolated: Vec<(Box<Expr>, Span)>,
+    pub interpolated: Vec<(Node<Expr>, Span)>,
 }
 
 #[derive(Debug)]
 pub enum Suffix {
-    Index(Box<Expr>),
+    Index(Node<Expr>),
     Field(Symbol),
     FieldIfNotNull(Symbol),
-    Call(Vec<Box<Type>>, Args),
+    Call(Vec<Node<Type>>, Args),
 }
 
 #[derive(Debug)]
 pub struct Cascade {
     pub suffixes: Vec<Suffix>,
-    pub assign: Option<(Option<ValueBinOp>, Box<Expr>)>,
+    pub assign: Option<(Option<ValueBinOp>, Node<Expr>)>,
 }
 
 #[derive(Debug)]
 pub struct NamedArg {
     pub name: Symbol,
-    pub expr: Box<Expr>,
+    pub expr: Node<Expr>,
 }
 
 #[derive(Debug)]
 pub struct Args {
-    pub unnamed: Vec<Box<Expr>>,
+    pub unnamed: Vec<Node<Expr>>,
     pub named: Vec<NamedArg>,
 }
 
@@ -357,7 +358,7 @@ pub type Metadata = Vec<MetadataItem>;
 
 #[derive(Debug)]
 pub struct FnSig {
-    pub return_type: Box<Type>,
+    pub return_type: Node<Type>,
     pub required: Vec<ArgDef>,
     pub optional: Vec<OptionalArgDef>,
     pub optional_kind: OptionalArgKind,
@@ -368,7 +369,7 @@ pub struct FnSig {
 impl Default for FnSig {
     fn default() -> Self {
         FnSig {
-            return_type: Box::new(Type::Infer),
+            return_type: Node::new(Type::Infer),
             required: vec![],
             optional: vec![],
             optional_kind: OptionalArgKind::default(),
@@ -380,8 +381,8 @@ impl Default for FnSig {
 
 #[derive(Debug)]
 pub enum FnBody {
-    Arrow(Box<Expr>),
-    Block(Box<Statement>),
+    Arrow(Node<Expr>),
+    Block(Node<Statement>),
     Native(Option<StringLiteral>),
 }
 
@@ -409,13 +410,13 @@ pub struct ArgDef {
 #[derive(Debug)]
 pub struct OptionalArgDef {
     pub arg: ArgDef,
-    pub default: Option<Box<Expr>>,
+    pub default: Option<Node<Expr>>,
 }
 
 #[derive(Debug)]
 pub struct VarType {
     pub fcv: FinalConstVar,
-    pub ty: Box<Type>,
+    pub ty: Node<Type>,
 }
 
 #[derive(Debug)]
@@ -428,20 +429,20 @@ pub enum FinalConstVar {
 #[derive(Debug)]
 pub struct NameAndInitializer {
     pub name: Symbol,
-    pub init: Option<Box<Expr>>,
+    pub init: Option<Node<Expr>>,
 }
 
 #[derive(Debug)]
 pub enum ForLoop {
-    CLike(Box<Statement>, Option<Box<Expr>>, Vec<Box<Expr>>),
-    In(Option<VarType>, Symbol, Box<Expr>),
+    CLike(Node<Statement>, Option<Node<Expr>>, Vec<Node<Expr>>),
+    In(Option<VarType>, Symbol, Node<Expr>),
 }
 
 #[derive(Debug)]
 pub struct SwitchCase {
     pub labels: Vec<Symbol>,
-    pub value: Option<Box<Expr>>,
-    pub statements: Vec<Box<Statement>>,
+    pub value: Option<Node<Expr>>,
+    pub statements: Vec<Node<Statement>>,
 }
 
 #[derive(Debug)]
@@ -452,29 +453,29 @@ pub struct CatchPart {
 
 #[derive(Debug)]
 pub struct TryPart {
-    pub on: Option<Box<Type>>,
+    pub on: Option<Node<Type>>,
     pub catch: Option<CatchPart>,
-    pub block: Box<Statement>,
+    pub block: Node<Statement>,
 }
 
 #[derive(Debug)]
 pub enum Statement {
-    Block(Vec<Box<Statement>>),
+    Block(Vec<Node<Statement>>),
     Var(VarType, Vec<NameAndInitializer>),
     Function(Function),
-    For(bool, ForLoop, Box<Statement>),
-    While(Box<Expr>, Box<Statement>),
-    DoWhile(Box<Statement>, Box<Expr>),
-    Switch(Box<Expr>, Vec<SwitchCase>),
-    If(Box<Expr>, Box<Statement>, Option<Box<Statement>>),
+    For(bool, ForLoop, Node<Statement>),
+    While(Node<Expr>, Node<Statement>),
+    DoWhile(Node<Statement>, Node<Expr>),
+    Switch(Node<Expr>, Vec<SwitchCase>),
+    If(Node<Expr>, Node<Statement>, Option<Node<Statement>>),
     Rethrow,
-    Try(Box<Statement>, Vec<TryPart>),
+    Try(Node<Statement>, Vec<TryPart>),
     Break(Option<Symbol>),
     Continue(Option<Symbol>),
-    Return(Option<Box<Expr>>),
-    Yield(Box<Expr>),
-    YieldEach(Box<Expr>),
-    Expression(Option<Box<Expr>>),
+    Return(Option<Node<Expr>>),
+    Yield(Node<Expr>),
+    YieldEach(Node<Expr>),
+    Expression(Option<Node<Expr>>),
     Assert(Args),
-    Labelled(Symbol, Box<Statement>),
+    Labelled(Symbol, Node<Statement>),
 }

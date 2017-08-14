@@ -4,6 +4,7 @@ use dart::ast::*;
 use dart::lex::Token;
 use syntax::symbol::Symbol;
 use syntax::codemap::Span;
+use node::Node;
 
 #[derive(Clone)]
 pub struct Parser<I> {
@@ -252,7 +253,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
     }
 
-    pub fn parse_type(&mut self) -> ParseResult<Box<Type>> {
+    pub fn parse_type(&mut self) -> ParseResult<Node<Type>> {
         let name = self.parse_unreserved_ident()?;
         let qualified = if let Some(second) = self.try(|p| {
             p.expect_punctuation('.')?;
@@ -274,15 +275,15 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         } else {
             vec![]
         };
-        let mut ty = Box::new(Type::Path(qualified, generics));
+        let mut ty = Node::new(Type::Path(qualified, generics));
         if self.eat_keyword("Function") {
             let sig = self.parse_fn_args(ty)?;
-            ty = Box::new(Type::Function(sig));
+            ty = Node::new(Type::Function(sig));
         }
         Ok(ty)
     }
 
-    fn parse_type_params(&mut self) -> ParseResult<Vec<Box<Type>>> {
+    fn parse_type_params(&mut self) -> ParseResult<Vec<Node<Type>>> {
         self.expect_punctuation('<')?;
         let type_args = self.parse_one_or_more(',', |p| p.parse_type())?;
         self.expect_punctuation('>')?;
@@ -346,27 +347,27 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(meta)
     }
 
-    pub fn parse_expr(&mut self) -> ParseResult<Box<Expr>> {
+    pub fn parse_expr(&mut self) -> ParseResult<Node<Expr>> {
         if self.eat_keyword("throw") {
-            return Ok(Box::new(Expr::Throw(self.parse_expr()?)));
+            return Ok(Node::new(Expr::Throw(self.parse_expr()?)));
         }
         let mut expr = self.parse_conditional_expr()?;
         while let Some(cascade) = self.try(|p| p.parse_casacade()) {
-            expr = Box::new(Expr::Cascade(expr, cascade));
+            expr = Node::new(Expr::Cascade(expr, cascade));
         }
         if let Some(op) = self.try(|p| p.parse_assign_op()) {
-            expr = Box::new(Expr::Binary(BinOp::Assign(op), expr, self.parse_expr()?));
+            expr = Node::new(Expr::Binary(BinOp::Assign(op), expr, self.parse_expr()?));
         }
         Ok(expr)
     }
 
-    pub fn parse_expr_no_cascade(&mut self) -> ParseResult<Box<Expr>> {
+    pub fn parse_expr_no_cascade(&mut self) -> ParseResult<Node<Expr>> {
         if self.eat_keyword("throw") {
-            return Ok(Box::new(Expr::Throw(self.parse_expr_no_cascade()?)));
+            return Ok(Node::new(Expr::Throw(self.parse_expr_no_cascade()?)));
         }
         let mut expr = self.parse_conditional_expr()?;
         if let Some(op) = self.try(|p| p.parse_assign_op()) {
-            expr = Box::new(Expr::Binary(
+            expr = Node::new(Expr::Binary(
                 BinOp::Assign(op),
                 expr,
                 self.parse_expr_no_cascade()?,
@@ -375,12 +376,12 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_conditional_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_conditional_expr(&mut self) -> ParseResult<Node<Expr>> {
         let expr = self.parse_is_null_expression()?;
         if !self.is_punctuation2('?', '?') && self.eat_punctuation('?') {
             let expr2 = self.parse_expr_no_cascade()?;
             self.expect_punctuation(':')?;
-            Ok(Box::new(Expr::Conditional(
+            Ok(Node::new(Expr::Conditional(
                 expr,
                 expr2,
                 self.parse_expr_no_cascade()?,
@@ -390,10 +391,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
     }
 
-    fn parse_is_null_expression(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_is_null_expression(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_or_expr()?;
         while self.eat_bin_op(BinOp::Value(ValueBinOp::IfNull)) {
-            expr = Box::new(Expr::Binary(
+            expr = Node::new(Expr::Binary(
                 BinOp::Value(ValueBinOp::IfNull),
                 expr,
                 self.parse_or_expr()?,
@@ -402,10 +403,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_or_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_or_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_and_expr()?;
         while self.eat_bin_op(BinOp::Bool(BoolBinOp::Or)) {
-            expr = Box::new(Expr::Binary(
+            expr = Node::new(Expr::Binary(
                 BinOp::Bool(BoolBinOp::Or),
                 expr,
                 self.parse_and_expr()?,
@@ -414,10 +415,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_and_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_and_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_equality_expr()?;
         while self.eat_bin_op(BinOp::Bool(BoolBinOp::And)) {
-            expr = Box::new(Expr::Binary(
+            expr = Node::new(Expr::Binary(
                 BinOp::Bool(BoolBinOp::And),
                 expr,
                 self.parse_equality_expr()?,
@@ -426,16 +427,16 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_equality_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_equality_expr(&mut self) -> ParseResult<Node<Expr>> {
         let expr = self.parse_relational_expr()?;
         if self.eat_bin_op(BinOp::Bool(BoolBinOp::Eq)) {
-            Ok(Box::new(Expr::Binary(
+            Ok(Node::new(Expr::Binary(
                 BinOp::Bool(BoolBinOp::Eq),
                 expr,
                 self.parse_relational_expr()?,
             )))
         } else if self.eat_bin_op(BinOp::Bool(BoolBinOp::Ne)) {
-            Ok(Box::new(Expr::Binary(
+            Ok(Node::new(Expr::Binary(
                 BinOp::Bool(BoolBinOp::Ne),
                 expr,
                 self.parse_relational_expr()?,
@@ -445,36 +446,36 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
     }
 
-    fn parse_relational_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_relational_expr(&mut self) -> ParseResult<Node<Expr>> {
         let expr = self.parse_bit_or_expr()?;
         if self.eat_keyword("is") {
             if self.eat_punctuation('!') {
-                Ok(Box::new(Expr::IsNot(expr, self.parse_type()?)))
+                Ok(Node::new(Expr::IsNot(expr, self.parse_type()?)))
             } else {
-                Ok(Box::new(Expr::Is(expr, self.parse_type()?)))
+                Ok(Node::new(Expr::Is(expr, self.parse_type()?)))
             }
         } else if self.eat_keyword("as") {
-            Ok(Box::new(Expr::As(expr, self.parse_type()?)))
+            Ok(Node::new(Expr::As(expr, self.parse_type()?)))
         } else if self.eat_bin_op(BinOp::Bool(BoolBinOp::Ge)) {
-            Ok(Box::new(Expr::Binary(
+            Ok(Node::new(Expr::Binary(
                 BinOp::Bool(BoolBinOp::Ge),
                 expr,
                 self.parse_bit_or_expr()?,
             )))
         } else if self.eat_bin_op(BinOp::Bool(BoolBinOp::Gt)) {
-            Ok(Box::new(Expr::Binary(
+            Ok(Node::new(Expr::Binary(
                 BinOp::Bool(BoolBinOp::Gt),
                 expr,
                 self.parse_bit_or_expr()?,
             )))
         } else if self.eat_bin_op(BinOp::Bool(BoolBinOp::Le)) {
-            Ok(Box::new(Expr::Binary(
+            Ok(Node::new(Expr::Binary(
                 BinOp::Bool(BoolBinOp::Le),
                 expr,
                 self.parse_bit_or_expr()?,
             )))
         } else if self.eat_bin_op(BinOp::Bool(BoolBinOp::Lt)) {
-            Ok(Box::new(Expr::Binary(
+            Ok(Node::new(Expr::Binary(
                 BinOp::Bool(BoolBinOp::Lt),
                 expr,
                 self.parse_bit_or_expr()?,
@@ -484,10 +485,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
     }
 
-    fn parse_bit_or_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_bit_or_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_bit_xor_expr()?;
         while self.eat_bin_op(BinOp::Value(ValueBinOp::BitOr)) {
-            expr = Box::new(Expr::Binary(
+            expr = Node::new(Expr::Binary(
                 BinOp::Value(ValueBinOp::BitOr),
                 expr,
                 self.parse_bit_xor_expr()?,
@@ -496,10 +497,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_bit_xor_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_bit_xor_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_bit_and_expr()?;
         while self.eat_bin_op(BinOp::Value(ValueBinOp::BitXor)) {
-            expr = Box::new(Expr::Binary(
+            expr = Node::new(Expr::Binary(
                 BinOp::Value(ValueBinOp::BitXor),
                 expr,
                 self.parse_bit_and_expr()?,
@@ -508,10 +509,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_bit_and_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_bit_and_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_shift_expr()?;
         while self.eat_bin_op(BinOp::Value(ValueBinOp::BitAnd)) {
-            expr = Box::new(Expr::Binary(
+            expr = Node::new(Expr::Binary(
                 BinOp::Value(ValueBinOp::BitAnd),
                 expr,
                 self.parse_shift_expr()?,
@@ -520,17 +521,17 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_shift_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_shift_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_add_expr()?;
         loop {
             if self.eat_bin_op(BinOp::Value(ValueBinOp::Lsh)) {
-                expr = Box::new(Expr::Binary(
+                expr = Node::new(Expr::Binary(
                     BinOp::Value(ValueBinOp::Lsh),
                     expr,
                     self.parse_add_expr()?,
                 ));
             } else if self.eat_bin_op(BinOp::Value(ValueBinOp::Rsh)) {
-                expr = Box::new(Expr::Binary(
+                expr = Node::new(Expr::Binary(
                     BinOp::Value(ValueBinOp::Rsh),
                     expr,
                     self.parse_add_expr()?,
@@ -542,17 +543,17 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_add_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_add_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_mult_expr()?;
         loop {
             if self.eat_bin_op(BinOp::Value(ValueBinOp::Add)) {
-                expr = Box::new(Expr::Binary(
+                expr = Node::new(Expr::Binary(
                     BinOp::Value(ValueBinOp::Add),
                     expr,
                     self.parse_mult_expr()?,
                 ));
             } else if self.eat_bin_op(BinOp::Value(ValueBinOp::Sub)) {
-                expr = Box::new(Expr::Binary(
+                expr = Node::new(Expr::Binary(
                     BinOp::Value(ValueBinOp::Sub),
                     expr,
                     self.parse_mult_expr()?,
@@ -564,29 +565,29 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_mult_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_mult_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_unary_expr()?;
         loop {
             if self.eat_bin_op(BinOp::Value(ValueBinOp::Mul)) {
-                expr = Box::new(Expr::Binary(
+                expr = Node::new(Expr::Binary(
                     BinOp::Value(ValueBinOp::Mul),
                     expr,
                     self.parse_unary_expr()?,
                 ));
             } else if self.eat_bin_op(BinOp::Value(ValueBinOp::Div)) {
-                expr = Box::new(Expr::Binary(
+                expr = Node::new(Expr::Binary(
                     BinOp::Value(ValueBinOp::Div),
                     expr,
                     self.parse_unary_expr()?,
                 ));
             } else if self.eat_bin_op(BinOp::Value(ValueBinOp::Mod)) {
-                expr = Box::new(Expr::Binary(
+                expr = Node::new(Expr::Binary(
                     BinOp::Value(ValueBinOp::Mod),
                     expr,
                     self.parse_unary_expr()?,
                 ));
             } else if self.eat_bin_op(BinOp::Value(ValueBinOp::TruncDiv)) {
-                expr = Box::new(Expr::Binary(
+                expr = Node::new(Expr::Binary(
                     BinOp::Value(ValueBinOp::TruncDiv),
                     expr,
                     self.parse_unary_expr()?,
@@ -598,35 +599,37 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_unary_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_unary_expr(&mut self) -> ParseResult<Node<Expr>> {
         if self.eat_punctuation('-') {
-            Ok(Box::new(Expr::Unary(UnOp::Neg, self.parse_unary_expr()?)))
+            Ok(Node::new(Expr::Unary(UnOp::Neg, self.parse_unary_expr()?)))
         } else if self.eat_punctuation('!') {
-            Ok(Box::new(Expr::Unary(UnOp::Not, self.parse_unary_expr()?)))
+            Ok(Node::new(Expr::Unary(UnOp::Not, self.parse_unary_expr()?)))
         } else if self.eat_punctuation('~') {
-            Ok(Box::new(
+            Ok(Node::new(
                 Expr::Unary(UnOp::BitNot, self.parse_unary_expr()?),
             ))
         } else if self.eat_keyword("await") {
-            Ok(Box::new(Expr::Unary(UnOp::Await, self.parse_unary_expr()?)))
+            Ok(Node::new(
+                Expr::Unary(UnOp::Await, self.parse_unary_expr()?),
+            ))
         } else if self.eat_punctuation2('+', '+') {
-            Ok(Box::new(Expr::Unary(UnOp::PreInc, self.parse_expr()?)))
+            Ok(Node::new(Expr::Unary(UnOp::PreInc, self.parse_expr()?)))
         } else if self.eat_punctuation2('-', '-') {
-            Ok(Box::new(Expr::Unary(UnOp::PreDec, self.parse_expr()?)))
+            Ok(Node::new(Expr::Unary(UnOp::PreDec, self.parse_expr()?)))
         } else {
             Ok(self.parse_postfix_expr()?)
         }
     }
 
-    fn parse_postfix_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_postfix_expr(&mut self) -> ParseResult<Node<Expr>> {
         let mut expr = self.parse_primary_expr()?;
         while let Some(suffix) = self.parse_suffix()? {
-            expr = Box::new(Expr::Suffix(expr, suffix));
+            expr = Node::new(Expr::Suffix(expr, suffix));
         }
         if self.eat_punctuation2('+', '+') {
-            Ok(Box::new(Expr::Unary(UnOp::PostInc, expr)))
+            Ok(Node::new(Expr::Unary(UnOp::PostInc, expr)))
         } else if self.eat_punctuation2('-', '-') {
-            Ok(Box::new(Expr::Unary(UnOp::PostDec, expr)))
+            Ok(Node::new(Expr::Unary(UnOp::PostDec, expr)))
         } else {
             Ok(expr)
         }
@@ -674,10 +677,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
     }
 
-    fn parse_primary_expr(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_primary_expr(&mut self) -> ParseResult<Node<Expr>> {
         if self.is_punctuation('(') {
             let args = self.try(|p| {
-                let args = p.parse_fn_args(Box::new(Type::Infer))?;
+                let args = p.parse_fn_args(Node::new(Type::Infer))?;
                 if p.is_punctuation('{') || p.is_punctuation2('=', '>') {
                     Ok(args)
                 } else {
@@ -685,12 +688,12 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 }
             });
             if let Some(args) = args {
-                return Ok(Box::new(Expr::Closure(args, self.parse_fn_body(false)?)));
+                return Ok(Node::new(Expr::Closure(args, self.parse_fn_body(false)?)));
             }
             self.expect_punctuation('(')?;
             let expr = self.parse_expr()?;
             self.expect_punctuation(')')?;
-            return Ok(Box::new(Expr::Paren(expr)));
+            return Ok(Node::new(Expr::Paren(expr)));
         }
         let const_ = self.eat_keyword("const");
         let mut generics = if self.is_punctuation('<') {
@@ -716,7 +719,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 assert_eq!(generics.len(), 1);
                 generics.pop()
             };
-            return Ok(Box::new(Expr::List {
+            return Ok(Node::new(Expr::List {
                 const_,
                 element_ty,
                 elements,
@@ -744,7 +747,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 let k_ty = generics.pop().unwrap();
                 Some((k_ty, v_ty))
             };
-            return Ok(Box::new(Expr::Map { const_, kv_ty, kv }));
+            return Ok(Node::new(Expr::Map { const_, kv_ty, kv }));
         }
         if const_ || self.eat_keyword("new") {
             let ty = self.parse_type()?;
@@ -755,7 +758,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 None
             };
             let args = self.parse_arguments()?;
-            return Ok(Box::new(Expr::New {
+            return Ok(Node::new(Expr::New {
                 const_,
                 ty,
                 ctor,
@@ -770,18 +773,18 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             while let Some(str_lit) = self.try(|p| p.parse_string_literal()) {
                 strings.push(str_lit);
             }
-            return Ok(Box::new(Expr::String(strings)));
+            return Ok(Node::new(Expr::String(strings)));
         }
         if self.eat_punctuation('#') {
-            return Ok(Box::new(Expr::Identifier(self.parse_ident()?)));
+            return Ok(Node::new(Expr::Identifier(self.parse_ident()?)));
         }
         if let Ok(ident) = self.parse_ident() {
-            return Ok(Box::new(Expr::Identifier(ident)));
+            return Ok(Node::new(Expr::Identifier(ident)));
         }
         expected!(self, Expr);
     }
 
-    fn parse_number_literal(&mut self) -> ParseResult<Box<Expr>> {
+    fn parse_number_literal(&mut self) -> ParseResult<Node<Expr>> {
         let mut number = String::new();
 
         if let Some(Token::IntegerLiteral(int_part)) = self.cur {
@@ -805,10 +808,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         if let Some(Token::WhiteSpace(_)) = self.cur {
             self.bump();
         }
-        Ok(Box::new(Expr::Number(Symbol::intern(&number))))
+        Ok(Node::new(Expr::Number(Symbol::intern(&number))))
     }
 
-    fn parse_fn_args(&mut self, return_type: Box<Type>) -> ParseResult<FnSig> {
+    fn parse_fn_args(&mut self, return_type: Node<Type>) -> ParseResult<FnSig> {
         let mut sig = FnSig {
             return_type,
             required: vec![],
@@ -886,7 +889,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
         let name = self.parse_ident()?;
         if self.is_punctuation('(') {
-            ty.ty = Box::new(Type::FunctionOld(self.parse_fn_args(ty.ty)?));
+            ty.ty = Node::new(Type::FunctionOld(self.parse_fn_args(ty.ty)?));
         }
         Ok(ArgDef {
             metadata,
@@ -922,13 +925,13 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                         self.eat_keyword("var");
                     }
                 }
-                Ok(Box::new(Type::Infer))
+                Ok(Node::new(Type::Infer))
             })?;
 
         Ok(VarType { fcv, ty })
     }
 
-    fn parse_block(&mut self) -> ParseResult<Box<Statement>> {
+    fn parse_block(&mut self) -> ParseResult<Node<Statement>> {
         self.expect_punctuation('{')?;
         let mut statements = vec![];
         if self.skip_blocks {
@@ -954,7 +957,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             }
         }
         self.expect_punctuation('}')?;
-        Ok(Box::new(Statement::Block(statements)))
+        Ok(Node::new(Statement::Block(statements)))
     }
 
     fn parse_catch_part(&mut self) -> ParseResult<CatchPart> {
@@ -969,9 +972,9 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(CatchPart { exception, trace })
     }
 
-    fn parse_statement(&mut self) -> ParseResult<Box<Statement>> {
+    fn parse_statement(&mut self) -> ParseResult<Node<Statement>> {
         if let Some((label, _)) = self.try(|p| Ok((p.parse_ident()?, p.expect_punctuation(':')?))) {
-            return Ok(Box::new(
+            return Ok(Node::new(
                 Statement::Labelled(label, self.parse_statement()?),
             ));
         }
@@ -1003,7 +1006,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     Ok(ForLoop::CLike(statement, cond, exprs))
                 })?;
             self.expect_punctuation(')')?;
-            return Ok(Box::new(
+            return Ok(Node::new(
                 Statement::For(await, for_loop, self.parse_statement()?),
             ));
         }
@@ -1011,7 +1014,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             self.expect_punctuation('(')?;
             let expr = self.parse_expr()?;
             self.expect_punctuation(')')?;
-            return Ok(Box::new(Statement::While(expr, self.parse_statement()?)));
+            return Ok(Node::new(Statement::While(expr, self.parse_statement()?)));
         }
         if self.eat_keyword("do") {
             let statement = self.parse_statement()?;
@@ -1020,7 +1023,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             let expr = self.parse_expr()?;
             self.expect_punctuation(')')?;
             self.expect_punctuation(';')?;
-            return Ok(Box::new(Statement::DoWhile(statement, expr)));
+            return Ok(Node::new(Statement::DoWhile(statement, expr)));
         }
         if self.eat_keyword("switch") {
             self.expect_punctuation('(')?;
@@ -1067,7 +1070,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 });
             }
             self.expect_punctuation('}')?;
-            return Ok(Box::new(Statement::Switch(expr, sc)));
+            return Ok(Node::new(Statement::Switch(expr, sc)));
         }
         if self.eat_keyword("if") {
             self.expect_punctuation('(')?;
@@ -1079,10 +1082,10 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             } else {
                 None
             };
-            return Ok(Box::new(Statement::If(expr, statement, else_statement)));
+            return Ok(Node::new(Statement::If(expr, statement, else_statement)));
         }
         if self.eat_keyword("rethrow") {
-            return Ok(Box::new(Statement::Rethrow));
+            return Ok(Node::new(Statement::Rethrow));
         }
         if self.eat_keyword("try") {
             let block = self.parse_block()?;
@@ -1118,71 +1121,71 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     break;
                 }
             }
-            return Ok(Box::new(Statement::Try(block, parts)));
+            return Ok(Node::new(Statement::Try(block, parts)));
         }
         if self.eat_keyword("break") {
             if self.is_punctuation(';') {
                 self.expect_punctuation(';')?;
-                return Ok(Box::new(Statement::Break(None)));
+                return Ok(Node::new(Statement::Break(None)));
             } else {
                 let ident = self.parse_ident()?;
                 self.expect_punctuation(';')?;
-                return Ok(Box::new(Statement::Break(Some(ident))));
+                return Ok(Node::new(Statement::Break(Some(ident))));
             }
         }
         if self.eat_keyword("continue") {
             if self.is_punctuation(';') {
                 self.expect_punctuation(';')?;
-                return Ok(Box::new(Statement::Continue(None)));
+                return Ok(Node::new(Statement::Continue(None)));
             } else {
                 let ident = self.parse_ident()?;
                 self.expect_punctuation(';')?;
-                return Ok(Box::new(Statement::Continue(Some(ident))));
+                return Ok(Node::new(Statement::Continue(Some(ident))));
             }
         }
         if self.eat_keyword("return") {
             if self.eat_punctuation(';') {
-                return Ok(Box::new(Statement::Return(None)));
+                return Ok(Node::new(Statement::Return(None)));
             }
             let expr = self.parse_expr()?;
             self.expect_punctuation(';')?;
-            return Ok(Box::new(Statement::Return(Some(expr))));
+            return Ok(Node::new(Statement::Return(Some(expr))));
         }
         if self.eat_keyword("yield") {
             if self.eat_punctuation('*') {
                 let expr = self.parse_expr()?;
                 self.expect_punctuation(';')?;
-                return Ok(Box::new(Statement::YieldEach(expr)));
+                return Ok(Node::new(Statement::YieldEach(expr)));
             } else {
                 let expr = self.parse_expr()?;
                 self.expect_punctuation(';')?;
-                return Ok(Box::new(Statement::Yield(expr)));
+                return Ok(Node::new(Statement::Yield(expr)));
             }
         }
         if self.eat_keyword("assert") {
             let args = self.parse_arguments()?;
             self.expect_punctuation(';')?;
-            return Ok(Box::new(Statement::Assert(args)));
+            return Ok(Node::new(Statement::Assert(args)));
         }
         let var_stmt = self.try(|p| {
             let var_type = p.parse_var_type(true)?;
             let names_and_initializers =
                 p.parse_one_or_more(',', |p| p.parse_name_and_initializer())?;
             p.expect_punctuation(';')?;
-            Ok(Box::new(Statement::Var(var_type, names_and_initializers)))
+            Ok(Node::new(Statement::Var(var_type, names_and_initializers)))
         });
         if let Some(var_stmt) = var_stmt {
             return Ok(var_stmt);
         }
         if let Some(function) = self.try(|p| p.parse_function(true)) {
-            return Ok(Box::new(Statement::Function(function)));
+            return Ok(Node::new(Statement::Function(function)));
         }
         if self.eat_punctuation(';') {
-            return Ok(Box::new(Statement::Expression(None)));
+            return Ok(Node::new(Statement::Expression(None)));
         }
         let expr = self.parse_expr()?;
         self.expect_punctuation(';')?;
-        Ok(Box::new(Statement::Expression(Some(expr))))
+        Ok(Node::new(Statement::Expression(Some(expr))))
     }
 
     fn parse_fn_body(&mut self, requires_semi: bool) -> ParseResult<FnBody> {
@@ -1264,7 +1267,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         self.expect_punctuation('=')?;
         let mut expr = self.parse_conditional_expr()?;
         while let Some(cascade) = self.try(|p| p.parse_casacade()) {
-            expr = Box::new(Expr::Cascade(expr, cascade));
+            expr = Node::new(Expr::Cascade(expr, cascade));
         }
         return Ok(ConstructorInitializer::Field(this, field, expr));
     }
@@ -1348,7 +1351,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         let (return_type, name) = self.try(|p| Ok((p.parse_type()?, p.parse_fn_name()?)))
             .ok_or(())
             .or_else(|_| -> ParseResult<_> {
-                Ok((Box::new(Type::Infer), self.parse_fn_name()?))
+                Ok((Node::new(Type::Infer), self.parse_fn_name()?))
             })?;
         let mut generics = vec![];
         if self.eat_punctuation('<') {
@@ -1415,7 +1418,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             } else {
                 None
             };
-            let sig = self.parse_fn_args(Box::new(Type::Infer))?;
+            let sig = self.parse_fn_args(Node::new(Type::Infer))?;
             if !self.is_punctuation2('=', '>') && self.eat_punctuation('=') {
                 let ty = self.parse_type()?;
                 let name = if self.eat_punctuation('.') {
@@ -1479,7 +1482,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     if let FinalConstVar::Var = fcv {
                         p.expect_keyword("var")?;
                     }
-                    Ok(Box::new(Type::Infer))
+                    Ok(Node::new(Type::Infer))
                 })?;
             let initializers = p.parse_one_or_more(',', |p| p.parse_name_and_initializer())?;
             p.expect_punctuation(';')?;
@@ -1643,7 +1646,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             let (return_type, name) = self.try(|p| Ok((p.parse_type()?, p.parse_ident()?)))
                 .ok_or(())
                 .or_else(|_| -> ParseResult<_> {
-                    Ok((Box::new(Type::Infer), self.parse_ident()?))
+                    Ok((Node::new(Type::Infer), self.parse_ident()?))
                 })?;
             let mut generics = vec![];
             if self.eat_punctuation('<') {
@@ -1651,7 +1654,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 self.expect_punctuation('>')?;
             }
             let sig = self.parse_fn_args(return_type)?;
-            let ty = Box::new(Type::FunctionOld(sig));
+            let ty = Node::new(Type::FunctionOld(sig));
             self.expect_punctuation(';')?;
             return Ok(Item::TypeAlias {
                 metadata,
