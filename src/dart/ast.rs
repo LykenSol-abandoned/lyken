@@ -1,6 +1,7 @@
 use enum_primitive::FromPrimitive;
 use std::iter;
 use syntax::symbol::Symbol;
+use syntax::codemap::Span;
 
 #[derive(Debug)]
 pub enum Item {
@@ -315,8 +316,8 @@ pub struct StringLiteral {
     pub raw: bool,
     pub triple: bool,
     pub quote: char,
-    pub prefix: Symbol,
-    pub interpolated: Vec<(Box<Expr>, Symbol)>,
+    pub prefix: Span,
+    pub interpolated: Vec<(Box<Expr>, Span)>,
 }
 
 #[derive(Debug)]

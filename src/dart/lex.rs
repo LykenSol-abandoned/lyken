@@ -1,17 +1,18 @@
-use unicode_width::UnicodeWidthChar;
 use unicode_xid::UnicodeXID;
 use std::str;
 use syntax::symbol::Symbol;
 use std::fmt;
+use std::rc::Rc;
+use syntax::codemap::{BytePos, FileMap, Span, Pos};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Token {
-    WhiteSpace(Symbol),
+    WhiteSpace(Span),
     Punctuation(char),
     Identifier(Symbol),
     IntegerLiteral(Symbol),
     StringLiteral {
-        contents: Symbol,
+        contents: Span,
         raw: bool,
         triple: bool,
         quote: char,
@@ -23,7 +24,7 @@ pub enum Token {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Token::WhiteSpace(s) |
+            Token::WhiteSpace(s) => write!(f, "{}", ::codemap().span_to_snippet(s).unwrap()),
             Token::IntegerLiteral(s) |
             Token::Identifier(s) => write!(f, "{}", s),
             Token::Punctuation(c) => write!(f, "{}", c),
@@ -46,7 +47,7 @@ impl fmt::Display for Token {
                     }
                     write!(f, "{}", quote)?;
                 }
-                write!(f, "{}", &contents.as_str())?;
+                write!(f, "{}", ::codemap().span_to_snippet(contents).unwrap())?;
                 if interpolation_after {
                     write!(f, "${{")?;
                 } else {
@@ -76,115 +77,100 @@ impl Token {
             _ => false,
         }
     }
-
-    pub fn advance_src_pos(&self, line: &mut usize, col: &mut usize) {
-        match *self {
-            Token::WhiteSpace(s) |
-            Token::IntegerLiteral(s) |
-            Token::Identifier(s) => {
-                for c in s.as_str().chars() {
-                    *col += UnicodeWidthChar::width(c).unwrap_or(1);
-                    if c == '\n' {
-                        *col = 1;
-                        *line += 1;
-                    }
-                }
-            }
-            Token::Punctuation(c) => *col += UnicodeWidthChar::width(c).unwrap_or(1),
-            Token::StringLiteral {
-                contents,
-                raw,
-                triple,
-                quote: _,
-                interpolation_before,
-                interpolation_after,
-            } => {
-                if raw {
-                    *col += 1;
-                }
-                if interpolation_before {
-                    *col += 1;
-                } else {
-                    *col += 1 + 2 * triple as usize;
-                }
-                for c in contents.as_str().chars() {
-                    *col += UnicodeWidthChar::width(c).unwrap_or(1);
-                    if c == '\n' {
-                        *col = 1;
-                        *line += 1;
-                    }
-                }
-                if interpolation_after {
-                    *col += 2;
-                } else {
-                    *col += 1 + 2 * triple as usize;
-                }
-            }
-        }
-
-    }
 }
 
 #[derive(Debug)]
 pub enum Error {
     UnterminatedShebang,
     UnterminatedStringLiteral,
-    UnterminatedBlockComment { start: usize },
+    UnterminatedBlockComment,
     UnhandledCharacter(char),
 }
 
 #[derive(Debug)]
 pub struct ErrorLocation {
     pub err: Error,
-    pub line: usize,
+    pub span: Span,
 }
 
-pub struct Lexer<'a> {
-    chars: str::Chars<'a>,
+pub struct Lexer {
+    filemap: Rc<FileMap>,
+    pos: BytePos,
+    next_pos: BytePos,
+    end: BytePos,
     c: char,
-    tokens: Vec<Token>,
-    line: usize,
+    tokens: Vec<(Span, Token)>,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(src: &'a str) -> Self {
+impl Lexer {
+    pub fn new(span: Span) -> Self {
+        assert!(span.lo <= span.hi);
+        let begin = ::codemap().lookup_byte_offset(span.lo);
+        let end = ::codemap().lookup_byte_offset(span.hi);
+        assert_eq!(begin.fm.start_pos, end.fm.start_pos);
+
+        let filemap = begin.fm;
+        let src = filemap.src.clone().unwrap();
+        if filemap.lines.borrow().is_empty() {
+            filemap.next_line(filemap.start_pos);
+            for (i, c) in src.char_indices() {
+                if c == '\n' {
+                    filemap.next_line(filemap.start_pos + Pos::from_usize(i + 1));
+                }
+                let ch_len = c.len_utf8();
+                if ch_len > 1 {
+                    filemap.record_multibyte_char(filemap.start_pos + Pos::from_usize(i), ch_len);
+                }
+            }
+        }
+
         Lexer {
-            chars: src.chars(),
-            c: '\n',
+            filemap,
+            pos: span.lo,
+            next_pos: span.lo,
+            end: span.hi,
+            c: ' ',
             tokens: vec![],
-            line: 0,
         }
     }
 
-    pub fn tokenize(mut self) -> Result<Vec<Token>, ErrorLocation> {
+    fn bump(&mut self) {
+        if self.next_pos >= self.end {
+            return;
+        }
+        self.pos = self.next_pos;
+        let i = (self.pos - self.filemap.start_pos).to_usize();
+        let src = self.filemap.src.clone().unwrap();
+        self.c = src[i..].chars().next().unwrap();
+        self.next_pos = self.pos + Pos::from_usize(self.c.len_utf8());
+    }
+
+    pub fn tokenize(mut self) -> Result<Vec<(Span, Token)>, ErrorLocation> {
         struct InterpolationLevel {
             quote: char,
             triple: bool,
             brace_depth: usize,
         }
         let mut interpolation_levels: Vec<InterpolationLevel> = vec![];
-
+        let mut span = ::mk_sp(self.pos, self.pos);
         macro_rules! bump {
             (or $otherwise:stmt) => {
-                match self.chars.next() {
-                    Some(next) => {
-                        if self.c == '\n' {
-                            self.line += 1;
-                        }
-                        self.c = next
-                    }
-                    None => {
-                        $otherwise;
-                        return Ok(self.tokens);
-                    }
+                span.hi = self.next_pos;
+                if self.next_pos >= self.end {
+                    $otherwise;
+                    return Ok(self.tokens);
                 }
+                self.bump();
             };
             () => {
                 bump!(or {})
             }
         }
+        macro_rules! put {
+            ($t:expr) => (self.tokens.push((span, $t)))
+        }
         macro_rules! emit {
-            ($e:expr) => (Err(ErrorLocation { err: $e, line: self.line })?)
+            ($e:expr) => (Err(ErrorLocation { err: $e, span })?)
         }
         bump!();
 
@@ -194,15 +180,16 @@ impl<'a> Lexer<'a> {
                 emit!(Error::UnterminatedShebang);
             }
             bump!(or emit!(Error::UnterminatedShebang));
-            let mut buffer = String::from("#!");
             while self.c != '\n' {
-                buffer.push(self.c);
-                bump!(or self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer))));
+                bump!(or put!(Token::WhiteSpace(span)));
             }
-            self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer)));
+            put!(Token::WhiteSpace(span));
         }
 
         loop {
+            span.lo = self.pos;
+            span.hi = self.next_pos;
+
             let mut buffer = String::new();
             let mut interpolation_before = false;
             if let Some(last) = interpolation_levels.last_mut() {
@@ -219,44 +206,36 @@ impl<'a> Lexer<'a> {
             if self.c.is_numeric() {
                 while self.c.is_alphanumeric() {
                     buffer.push(self.c);
-                    bump!(or self.tokens.push(Token::IntegerLiteral(Symbol::intern(&buffer))));
+                    bump!(or put!(Token::IntegerLiteral(Symbol::intern(&buffer))));
                 }
-                self.tokens.push(
-                    Token::IntegerLiteral(Symbol::intern(&buffer)),
-                );
+                put!(Token::IntegerLiteral(Symbol::intern(&buffer)));
             } else if self.c.is_whitespace() {
                 while self.c.is_whitespace() {
-                    buffer.push(self.c);
-                    bump!(or self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer))));
+                    bump!(or put!(Token::WhiteSpace(span)));
                 }
-                self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer)));
+                put!(Token::WhiteSpace(span));
             } else if UnicodeXID::is_xid_start(self.c) || self.c == '$' || self.c == '_' {
                 while UnicodeXID::is_xid_continue(self.c) || self.c == '$' {
                     buffer.push(self.c);
-                    bump!(or self.tokens.push(Token::Identifier(Symbol::intern(&buffer))));
+                    bump!(or put!(Token::Identifier(Symbol::intern(&buffer))));
                 }
-                self.tokens.push(Token::Identifier(Symbol::intern(&buffer)));
+                put!(Token::Identifier(Symbol::intern(&buffer)));
             } else if "{}[]()=+-*%&|.,:;!<>@~#?^".contains(self.c) && !interpolation_before {
-                self.tokens.push(Token::Punctuation(self.c));
+                put!(Token::Punctuation(self.c));
                 bump!();
             } else if self.c == '/' {
-                bump!(or self.tokens.push(Token::Punctuation (self.c)));
+                bump!(or put!(Token::Punctuation (self.c)));
                 if self.c == '/' {
-                    buffer.push('/');
                     while self.c != '\n' {
-                        buffer.push(self.c);
-                        bump!(or self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer))));
+                        bump!(or put!(Token::WhiteSpace(span)));
                     }
-                    self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer)));
+                    put!(Token::WhiteSpace(span));
                 } else if self.c == '*' {
                     let mut depth = 0;
-                    let unterminated = Error::UnterminatedBlockComment { start: self.line };
-                    buffer += "/*";
-                    bump!(or emit!(unterminated));
+                    bump!(or emit!(Error::UnterminatedBlockComment));
                     loop {
                         if self.c == '*' {
-                            buffer.push(self.c);
-                            bump!(or emit!(unterminated));
+                            bump!(or emit!(Error::UnterminatedBlockComment));
                             if self.c == '/' {
                                 if depth == 0 {
                                     break;
@@ -266,8 +245,7 @@ impl<'a> Lexer<'a> {
                                 continue;
                             }
                         } else if self.c == '/' {
-                            buffer.push(self.c);
-                            bump!(or emit!(unterminated));
+                            bump!(or emit!(Error::UnterminatedBlockComment));
                             if self.c == '*' {
                                 depth += 1;
                             } else {
@@ -275,15 +253,12 @@ impl<'a> Lexer<'a> {
                             }
                         }
 
-                        buffer.push(self.c);
-                        bump!(or emit!(unterminated));
+                        bump!(or emit!(Error::UnterminatedBlockComment));
                     }
-                    buffer.push('/');
-                    self.tokens.push(Token::WhiteSpace(Symbol::intern(&buffer)));
-                    bump!();
-
+                    bump!(or put!(Token::WhiteSpace(span)));
+                    put!(Token::WhiteSpace(span));
                 } else {
-                    self.tokens.push(Token::Punctuation('/'));
+                    put!(Token::Punctuation('/'));
                 }
             } else if self.c == '\'' || self.c == '"' || interpolation_before {
 
@@ -292,22 +267,27 @@ impl<'a> Lexer<'a> {
                 let mut triple = false;
                 let mut interpolation_after = false;
                 match self.tokens.last() {
-                    Some(&Token::Identifier(ref last)) => {
+                    Some(&(sp, Token::Identifier(ref last))) => {
                         if *last == "r" {
                             raw = true;
+                            span.lo = sp.lo;
                         }
                     }
-                    Some(&Token::StringLiteral {
-                             ref contents,
-                             raw: prev_raw,
-                             triple: false,
-                             quote: prev_quote,
-                             interpolation_after: false,
-                             interpolation_before: false,
-                         }) => {
-                        if contents.as_str().is_empty() && prev_quote == quote {
+                    Some(&(sp,
+                           Token::StringLiteral {
+                               contents,
+                               raw: prev_raw,
+                               triple: false,
+                               quote: prev_quote,
+                               interpolation_after: false,
+                               interpolation_before: false,
+                           })) => {
+                        if ::codemap().span_to_snippet(contents).unwrap().is_empty() &&
+                            prev_quote == quote
+                        {
                             triple = true;
                             raw = prev_raw;
+                            span.lo = sp.lo;
                         }
                     }
                     _ => {}
@@ -321,7 +301,9 @@ impl<'a> Lexer<'a> {
                     triple = original.triple;
                 }
                 bump!(or emit!(Error::UnterminatedStringLiteral));
+                let mut contents = ::mk_sp(self.pos, self.pos);
                 loop {
+                    contents.hi = self.pos;
                     if self.c == quote {
                         if !triple {
                             break;
@@ -332,9 +314,7 @@ impl<'a> Lexer<'a> {
                             if self.c == quote {
                                 break;
                             }
-                            buffer.push(quote);
                         }
-                        buffer.push(quote);
                     }
                     if self.c == '\n' && !triple {
                         emit!(Error::UnterminatedStringLiteral)
@@ -350,25 +330,23 @@ impl<'a> Lexer<'a> {
                             interpolation_after = true;
                             break;
                         }
-                        buffer.push('$');
                         continue;
                     }
                     if self.c == '\\' && !raw {
-                        buffer.push(self.c);
                         bump!(or emit!(Error::UnterminatedStringLiteral));
                     }
-                    buffer.push(self.c);
                     bump!(or emit!(Error::UnterminatedStringLiteral));
                 }
-                self.tokens.push(Token::StringLiteral {
-                    contents: Symbol::intern(&buffer),
+                let token = Token::StringLiteral {
+                    contents,
                     raw,
                     triple,
                     quote,
                     interpolation_after,
                     interpolation_before,
-                });
-                bump!();
+                };
+                bump!(or put!(token));
+                put!(token);
             } else {
                 emit!(Error::UnhandledCharacter(self.c))
             }

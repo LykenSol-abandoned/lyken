@@ -3,13 +3,13 @@
 use dart::ast::*;
 use dart::lex::Token;
 use syntax::symbol::Symbol;
+use syntax::codemap::Span;
 
 #[derive(Clone)]
 pub struct Parser<I> {
     tokens: I,
     cur: Option<Token>,
-    line: usize,
-    col: usize,
+    cur_span: Span,
     skip_blocks: bool,
 }
 
@@ -21,8 +21,7 @@ error_chain! {
     errors {
         ExpectedAt {
             expected: Expected,
-            line: usize,
-            col: usize,
+            span: Span,
         }
     }
 }
@@ -44,19 +43,17 @@ macro_rules! expected {
     ($p:expr, $kind:ident $($rest:tt)*) => {
         bail!(ErrorKind::ExpectedAt {
             expected: Expected::$kind $($rest)*,
-            line: $p.line,
-            col: $p.col
+            span: $p.cur_span
         })
     }
 }
 
-impl<I: Clone + Iterator<Item = Token>> Parser<I> {
+impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
     pub fn new(tokens: I) -> Self {
         let mut parser = Parser {
             tokens,
             cur: None,
-            line: 1,
-            col: 1,
+            cur_span: Span::default(),
             skip_blocks: false,
         };
         parser.bump();
@@ -81,10 +78,15 @@ impl<I: Clone + Iterator<Item = Token>> Parser<I> {
     }
 
     fn bump_raw(&mut self) {
-        if let Some(token) = self.cur {
-            token.advance_src_pos(&mut self.line, &mut self.col);
+        match self.tokens.next() {
+            Some((span, token)) => {
+                self.cur_span = span;
+                self.cur = Some(token);
+            }
+            None => {
+                self.cur = None;
+            }
         }
-        self.cur = self.tokens.next();
     }
 
     fn bump(&mut self) {
