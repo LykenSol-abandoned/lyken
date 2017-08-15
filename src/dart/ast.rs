@@ -221,9 +221,12 @@ impl BinOp {
     pub fn values() -> impl Iterator<Item = Self> {
         (BoolBinOp::values().map(BinOp::Bool))
             .chain(ValueBinOp::values().map(BinOp::Value))
-            .chain(ValueBinOp::values().map(Some).chain(iter::once(None)).map(
-                BinOp::Assign,
-            ))
+            .chain(
+                ValueBinOp::values()
+                    .map(Some)
+                    .chain(iter::once(None))
+                    .map(BinOp::Assign),
+            )
     }
 }
 
