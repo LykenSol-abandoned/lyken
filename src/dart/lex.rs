@@ -3,7 +3,7 @@ use std::str;
 use syntax::symbol::Symbol;
 use std::fmt;
 use std::rc::Rc;
-use syntax::codemap::{BytePos, FileMap, Span, Pos};
+use syntax::codemap::{BytePos, FileMap, Pos, Span};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Token {
@@ -25,8 +25,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Token::WhiteSpace(s) => write!(f, "{}", ::codemap().span_to_snippet(s).unwrap()),
-            Token::IntegerLiteral(s) |
-            Token::Identifier(s) => write!(f, "{}", s),
+            Token::IntegerLiteral(s) | Token::Identifier(s) => write!(f, "{}", s),
             Token::Punctuation(c) => write!(f, "{}", c),
             Token::StringLiteral {
                 contents,
@@ -267,29 +266,27 @@ impl Lexer {
                 let mut triple = false;
                 let mut interpolation_after = false;
                 match self.tokens.last() {
-                    Some(&(sp, Token::Identifier(ref last))) => {
-                        if *last == "r" {
-                            raw = true;
-                            span.lo = sp.lo;
-                        }
-                    }
-                    Some(&(sp,
-                           Token::StringLiteral {
-                               contents,
-                               raw: prev_raw,
-                               triple: false,
-                               quote: prev_quote,
-                               interpolation_after: false,
-                               interpolation_before: false,
-                           })) => {
-                        if ::codemap().span_to_snippet(contents).unwrap().is_empty() &&
-                            prev_quote == quote
-                        {
-                            triple = true;
-                            raw = prev_raw;
-                            span.lo = sp.lo;
-                        }
-                    }
+                    Some(&(sp, Token::Identifier(ref last))) => if *last == "r" {
+                        raw = true;
+                        span.lo = sp.lo;
+                    },
+                    Some(&(
+                        sp,
+                        Token::StringLiteral {
+                            contents,
+                            raw: prev_raw,
+                            triple: false,
+                            quote: prev_quote,
+                            interpolation_after: false,
+                            interpolation_before: false,
+                        },
+                    )) => if ::codemap().span_to_snippet(contents).unwrap().is_empty() &&
+                        prev_quote == quote
+                    {
+                        triple = true;
+                        raw = prev_raw;
+                        span.lo = sp.lo;
+                    },
                     _ => {}
                 }
                 if raw || triple {

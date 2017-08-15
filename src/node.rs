@@ -22,6 +22,8 @@ impl<T: fmt::Debug> fmt::Debug for Node<T> {
 
 impl<T> Node<T> {
     pub fn new(value: T) -> Self {
-        Node { ptr: Rc::new(value) }
+        Node {
+            ptr: Rc::new(value),
+        }
     }
 }

@@ -7,7 +7,7 @@ extern crate enum_primitive;
 extern crate unicode_xid;
 extern crate syntax;
 
-use syntax::codemap::{CodeMap, FilePathMapping, Span, BytePos, SPAN_DEBUG, NO_EXPANSION};
+use syntax::codemap::{BytePos, CodeMap, FilePathMapping, Span, NO_EXPANSION, SPAN_DEBUG};
 use std::rc::Rc;
 
 pub mod node;

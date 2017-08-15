@@ -196,10 +196,33 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             expected!(self, Ident);
         };
         match &ident.as_str()[..] {
-            "assert" | "break" | "case" | "catch" | "class" | "const" | "continue" |
-            "default" | "do" | "else" | "enum" | "extends" | "ﬁnal" | "ﬁnally" | "for" |
-            "if" | "in" | "is" | "new" | "rethrow" | "return" | "switch" | "throw" | "try" |
-            "var" | "while" | "with" => {
+            "assert" |
+            "break" |
+            "case" |
+            "catch" |
+            "class" |
+            "const" |
+            "continue" |
+            "default" |
+            "do" |
+            "else" |
+            "enum" |
+            "extends" |
+            "ﬁnal" |
+            "ﬁnally" |
+            "for" |
+            "if" |
+            "in" |
+            "is" |
+            "new" |
+            "rethrow" |
+            "return" |
+            "switch" |
+            "throw" |
+            "try" |
+            "var" |
+            "while" |
+            "with" => {
                 expected!(self, Ident);
             }
             _ => {}
@@ -212,8 +235,20 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         let ident = self.try(|p| {
             let ident = p.parse_ident()?;
             match &ident.as_str()[..] {
-                "abstract" | "as" | "deferred" | "export" | "external" | "factory" | "get" |
-                "implements" | "import" | "library" | "operator" | "part" | "set" | "static" |
+                "abstract" |
+                "as" |
+                "deferred" |
+                "export" |
+                "external" |
+                "factory" |
+                "get" |
+                "implements" |
+                "import" |
+                "library" |
+                "operator" |
+                "part" |
+                "set" |
+                "static" |
                 "typedef" => expected!(p, Ident),
                 _ => {}
             }
@@ -258,8 +293,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         let qualified = if let Some(second) = self.try(|p| {
             p.expect_punctuation('.')?;
             p.parse_unreserved_ident()
-        })
-        {
+        }) {
             Qualified {
                 prefix: Some(name),
                 name: second,
@@ -1286,38 +1320,32 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 '*' => OverloadedOp::Value(ValueBinOp::Mul),
                 '/' => OverloadedOp::Value(ValueBinOp::Div),
                 '%' => OverloadedOp::Value(ValueBinOp::Mod),
-                '~' => {
-                    if self.is_punctuation2('~', '/') {
-                        self.bump();
-                        OverloadedOp::Value(ValueBinOp::TruncDiv)
-                    } else {
-                        OverloadedOp::BitNot
-                    }
-                }
+                '~' => if self.is_punctuation2('~', '/') {
+                    self.bump();
+                    OverloadedOp::Value(ValueBinOp::TruncDiv)
+                } else {
+                    OverloadedOp::BitNot
+                },
                 '+' => OverloadedOp::Value(ValueBinOp::Add),
                 '-' => OverloadedOp::Value(ValueBinOp::Sub),
-                '>' => {
-                    if self.is_punctuation2('>', '>') {
-                        self.bump();
-                        OverloadedOp::Value(ValueBinOp::Rsh)
-                    } else if self.is_punctuation2('>', '=') {
-                        self.bump();
-                        OverloadedOp::Bool(BoolBinOp::Ge)
-                    } else {
-                        OverloadedOp::Bool(BoolBinOp::Gt)
-                    }
-                }
-                '<' => {
-                    if self.is_punctuation2('<', '<') {
-                        self.bump();
-                        OverloadedOp::Value(ValueBinOp::Lsh)
-                    } else if self.is_punctuation2('<', '=') {
-                        self.bump();
-                        OverloadedOp::Bool(BoolBinOp::Le)
-                    } else {
-                        OverloadedOp::Bool(BoolBinOp::Lt)
-                    }
-                }
+                '>' => if self.is_punctuation2('>', '>') {
+                    self.bump();
+                    OverloadedOp::Value(ValueBinOp::Rsh)
+                } else if self.is_punctuation2('>', '=') {
+                    self.bump();
+                    OverloadedOp::Bool(BoolBinOp::Ge)
+                } else {
+                    OverloadedOp::Bool(BoolBinOp::Gt)
+                },
+                '<' => if self.is_punctuation2('<', '<') {
+                    self.bump();
+                    OverloadedOp::Value(ValueBinOp::Lsh)
+                } else if self.is_punctuation2('<', '=') {
+                    self.bump();
+                    OverloadedOp::Bool(BoolBinOp::Le)
+                } else {
+                    OverloadedOp::Bool(BoolBinOp::Lt)
+                },
                 '=' => {
                     self.expect_punctuation2('=', '=')?;
                     return Ok(OverloadedOp::Bool(BoolBinOp::Eq));
@@ -1350,9 +1378,9 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
     fn parse_function(&mut self, requires_body: bool) -> ParseResult<Function> {
         let (return_type, name) = self.try(|p| Ok((p.parse_type()?, p.parse_fn_name()?)))
             .ok_or(())
-            .or_else(|_| -> ParseResult<_> {
-                Ok((Node::new(Type::Infer), self.parse_fn_name()?))
-            })?;
+            .or_else(
+                |_| -> ParseResult<_> { Ok((Node::new(Type::Infer), self.parse_fn_name()?)) },
+            )?;
         let mut generics = vec![];
         if self.eat_punctuation('<') {
             generics = self.parse_one_or_more(',', |p| p.parse_type_param_def())?;
@@ -1404,12 +1432,11 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             method_qualifiers.push(MethodQualifiers::Factory);
         }
         let is_constructor = self.probe(|p| {
-            p.parse_ident().ok() == Some(class_name) &&
-                if p.eat_punctuation('.') {
-                    p.parse_ident().is_ok()
-                } else {
-                    true
-                } && p.is_punctuation('(')
+            p.parse_ident().ok() == Some(class_name) && if p.eat_punctuation('.') {
+                p.parse_ident().is_ok()
+            } else {
+                true
+            } && p.is_punctuation('(')
         });
         if is_constructor {
             self.bump();
@@ -1436,10 +1463,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 });
             }
             let initializers = if self.eat_punctuation(':') {
-                self.parse_one_or_more(
-                    ',',
-                    |p| p.parse_constructor_initializer(),
-                )?
+                self.parse_one_or_more(',', |p| p.parse_constructor_initializer())?
             } else {
                 vec![]
             };
@@ -1645,9 +1669,9 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         if self.eat_keyword("typedef") {
             let (return_type, name) = self.try(|p| Ok((p.parse_type()?, p.parse_ident()?)))
                 .ok_or(())
-                .or_else(|_| -> ParseResult<_> {
-                    Ok((Node::new(Type::Infer), self.parse_ident()?))
-                })?;
+                .or_else(
+                    |_| -> ParseResult<_> { Ok((Node::new(Type::Infer), self.parse_ident()?)) },
+                )?;
             let mut generics = vec![];
             if self.eat_punctuation('<') {
                 generics = self.parse_one_or_more(',', |p| p.parse_type_param_def())?;
@@ -1698,13 +1722,13 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
 
     fn parse_string_literal(&mut self) -> ParseResult<StringLiteral> {
         if let Some(Token::StringLiteral {
-                        contents,
-                        raw,
-                        triple,
-                        quote,
-                        interpolation_before: false,
-                        interpolation_after,
-                    }) = self.cur
+            contents,
+            raw,
+            triple,
+            quote,
+            interpolation_before: false,
+            interpolation_after,
+        }) = self.cur
         {
             self.bump();
             let mut lit = StringLiteral {
@@ -1719,13 +1743,14 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     let expr = self.parse_expr()?;
                     match self.cur {
                         Some(Token::StringLiteral {
-                                 contents,
-                                 raw,
-                                 triple,
-                                 quote,
-                                 interpolation_before: true,
-                                 interpolation_after,
-                             }) if (raw, triple, quote) == (lit.raw, lit.triple, lit.quote) => {
+                            contents,
+                            raw,
+                            triple,
+                            quote,
+                            interpolation_before: true,
+                            interpolation_after,
+                        }) if (raw, triple, quote) == (lit.raw, lit.triple, lit.quote) =>
+                        {
                             self.bump();
                             lit.interpolated.push((expr, contents));
                             if !interpolation_after {
