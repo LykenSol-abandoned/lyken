@@ -10,6 +10,7 @@ extern crate syntax;
 use syntax::codemap::{BytePos, CodeMap, FilePathMapping, Span, NO_EXPANSION, SPAN_DEBUG};
 use std::rc::Rc;
 
+#[macro_use]
 pub mod node;
 
 pub mod dart {
