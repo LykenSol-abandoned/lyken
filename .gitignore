@@ -2,4 +2,5 @@ target/
 **/*.rs.bk
 Cargo.lock
 /.vs
+/.vscode
 /tests/**/*.dart
