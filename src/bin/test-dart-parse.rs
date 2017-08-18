@@ -14,7 +14,7 @@ fn main() {
         if entry.path().extension().map_or(false, |x| x == "dart") {
             let file = lyken::codemap().load_file(&entry.path()).unwrap();
             match Lexer::new(lyken::mk_sp(file.start_pos, file.end_pos)).tokenize() {
-                Ok(tokens) => match Parser::new(tokens.iter().cloned()).parse_items() {
+                Ok(tokens) => match Parser::new(tokens.iter().cloned()).dart_items() {
                     Ok(_) => {}
                     Err(parse::Error(parse::ErrorKind::ExpectedAt { expected, span }, state)) => {
                         println!("{:?}: expected {:?}", span, expected);

@@ -5,12 +5,22 @@ license = "MIT/Apache-2.0"
 name = "lyken"
 repository = "https://github.com/lykenware/lyken"
 version = "0.1.0"
+
+[lib]
+test = false
+doctest = false
+
 [[bin]]
 name = "test-dart-lex"
+test = false
+
 [[bin]]
 name = "test-dart-parse"
+test = false
+
 [[bin]]
 name = "test-dsl"
+test = false
 
 [dependencies]
 difference = "1.0.0"
