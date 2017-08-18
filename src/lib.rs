@@ -26,6 +26,7 @@ pub mod dart {
 pub mod dsl {
     pub mod ast;
     pub mod parse;
+    pub mod print;
 }
 
 pub fn codemap() -> Rc<CodeMap> {

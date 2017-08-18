@@ -19,7 +19,7 @@ fn main() {
             Ok(items) => {
                 let mut out = File::create(path.with_extension("dart")).unwrap();
                 let code = Codegen::new().codegen_items(&items);
-                let result = Printer::new().print_items(&code);
+                let result = Printer::new().dart_items(&code);
                 for token in result {
                     write!(out, "{}", token).unwrap();
                 }
