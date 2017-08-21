@@ -977,7 +977,7 @@ impl Printer {
         }
     }
 
-    fn dart_class_member(&mut self, member: &ClassMember, class_name: Symbol) {
+    pub fn dart_class_member(&mut self, member: &ClassMember, class_name: Symbol) {
         match *member {
             ClassMember::Redirect {
                 ref metadata,

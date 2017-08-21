@@ -93,9 +93,18 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             let name = self.parse_ident()?;
             self.expect_punctuation('{')?;
             let fields = self.dsl_field_defs()?;
-            let instance = self.dsl_instance()?;
+            let mut dart_members = vec![];
+            while let Some(dart_member) = self.try(|p| p.dart_class_member(name)) {
+                dart_members.push(dart_member);
+            }
+            let body = self.dsl_instance()?;
             self.expect_punctuation('}')?;
-            return Ok(Item::ComponentDef(name, fields, instance));
+            return Ok(Item::ComponentDef {
+                name,
+                fields,
+                dart_members,
+                body,
+            });
         }
         Ok(Item::Dart(self.dart_item()?))
     }

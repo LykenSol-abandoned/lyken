@@ -13,7 +13,12 @@ impl Printer {
 
     fn dsl_item(&mut self, item: &Item) {
         match *item {
-            Item::ComponentDef(name, ref fields, ref instance) => {
+            Item::ComponentDef {
+                name,
+                ref fields,
+                ref dart_members,
+                ref body,
+            } => {
                 self.print_str("def ");
                 self.print_ident(name);
                 self.print_str(" {");
@@ -24,7 +29,10 @@ impl Printer {
                         self.print_str(", ");
                     }
                 }
-                self.dsl_instance(instance);
+                for dart_member in dart_members {
+                    self.dart_class_member(dart_member, name);
+                }
+                self.dsl_instance(body);
                 self.exit();
                 self.print_str("}");
             }

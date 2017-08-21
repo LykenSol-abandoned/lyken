@@ -28,7 +28,7 @@ pub enum Item {
         superclass: Option<Node<Type>>,
         mixins: Vec<Node<Type>>,
         interfaces: Vec<Node<Type>>,
-        members: Vec<ClassMember>,
+        members: Vec<Node<ClassMember>>,
     },
     MixinClass {
         metadata: Metadata,

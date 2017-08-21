@@ -1409,7 +1409,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         })
     }
 
-    fn dart_class_member(&mut self, class_name: Symbol) -> ParseResult<ClassMember> {
+    pub fn dart_class_member(&mut self, class_name: Symbol) -> ParseResult<Node<ClassMember>> {
         let metadata = self.dart_metadata()?;
         let mut method_qualifiers = vec![];
         if self.eat_keyword("external") {
@@ -1450,13 +1450,13 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     None
                 };
                 self.expect_punctuation(';')?;
-                return Ok(ClassMember::Redirect {
+                return Ok(Node::new(ClassMember::Redirect {
                     metadata,
                     method_qualifiers,
                     name,
                     sig,
                     ty,
-                });
+                }));
             }
             let initializers = if self.eat_punctuation(':') {
                 self.dart_one_or_more(',', |p| p.dart_constructor_initializer())?
@@ -1468,14 +1468,14 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             } else {
                 Some(self.dart_fn_body(true)?)
             };
-            return Ok(ClassMember::Constructor {
+            return Ok(Node::new(ClassMember::Constructor {
                 metadata,
                 method_qualifiers,
                 name,
                 sig,
                 initializers,
                 function_body,
-            });
+            }));
         }
 
         let mut static_ = false;
@@ -1510,15 +1510,15 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         });
 
         if let Some((var_type, initializers)) = fields {
-            return Ok(ClassMember::Fields {
+            return Ok(Node::new(ClassMember::Fields {
                 metadata,
                 static_,
                 var_type,
                 initializers,
-            });
+            }));
         }
         let function = self.dart_function(false)?;
-        Ok(ClassMember::Method(metadata, method_qualifiers, function))
+        Ok(Node::new(ClassMember::Method(metadata, method_qualifiers, function)))
     }
 
     pub fn dart_item(&mut self) -> ParseResult<Node<Item>> {

@@ -3,7 +3,12 @@ use dart;
 use node::Node;
 
 pub enum Item {
-    ComponentDef(Symbol, Vec<FieldDef>, Instance),
+    ComponentDef {
+        name: Symbol,
+        fields: Vec<FieldDef>,
+        dart_members: Vec<Node<dart::ast::ClassMember>>,
+        body: Instance,
+    },
     Dart(Node<dart::ast::Item>),
 }
 
