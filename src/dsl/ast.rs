@@ -4,7 +4,7 @@ use node::Node;
 
 pub enum Item {
     ComponentDef(Symbol, Vec<FieldDef>, Instance),
-    Dart(Vec<Node<dart::ast::Item>>),
+    Dart(Node<dart::ast::Item>),
 }
 
 pub struct Instance {

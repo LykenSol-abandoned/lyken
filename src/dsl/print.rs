@@ -28,9 +28,7 @@ impl Printer {
                 self.exit();
                 self.print_str("}");
             }
-            Item::Dart(ref items) => for item in items {
-                self.dart_item(item);
-            },
+            Item::Dart(ref item) => self.dart_item(item),
         }
     }
 

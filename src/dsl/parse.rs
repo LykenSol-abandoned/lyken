@@ -97,17 +97,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             self.expect_punctuation('}')?;
             return Ok(Item::ComponentDef(name, fields, instance));
         }
-        self.expect_keyword("dart")?;
-        self.expect_punctuation('{')?;
-        let mut items = vec![];
-        loop {
-            if self.is_punctuation('}') {
-                break;
-            }
-            items.push(self.dart_item()?);
-        }
-        self.expect_punctuation('}')?;
-        Ok(Item::Dart(items))
+        Ok(Item::Dart(self.dart_item()?))
     }
 
     pub fn dsl_items(&mut self) -> ParseResult<Vec<Item>> {
