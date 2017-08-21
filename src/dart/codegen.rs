@@ -16,9 +16,13 @@ impl Codegen {
 
     fn codegen_item(&mut self, item: &Item) -> Node<ast::Item> {
         match *item {
-            Item::ComponentDef(name, ref fields, ref instance) => {
+            Item::ComponentDef {
+                name,
+                ref fields,
+                ref dart_members,
+                ref body,
+            } => {
                 let params;
-                let body;
                 let superclass;
                 let mut class_members = vec![];
                 superclass = Some(ast::Type::simple_path("StatelessWidget"));
@@ -59,7 +63,7 @@ impl Codegen {
                         async: false,
                         generator: false,
                     };
-                    class_members.push(ast::ClassMember::Constructor {
+                    class_members.push(Node::new(ast::ClassMember::Constructor {
                         metadata: vec![],
                         method_qualifiers: vec![ast::MethodQualifiers::Const],
                         name: Some(name),
@@ -81,16 +85,17 @@ impl Codegen {
                             ),
                         ],
                         function_body: None,
-                    });
+                    }));
                 }
 
                 class_members.extend(self.codegen_field_defs(fields));
-                body = Some(ast::FnBody::Block(Node::new(ast::Statement::Block(vec![
-                    Node::new(ast::Statement::Return(
-                        Some(self.codegen_instance(instance)),
-                    )),
+
+                class_members.extend(dart_members.iter().cloned());
+
+                let body = Some(ast::FnBody::Block(Node::new(ast::Statement::Block(vec![
+                    Node::new(ast::Statement::Return(Some(self.codegen_instance(body)))),
                 ]))));
-                class_members.push(ast::ClassMember::Method(
+                class_members.push(Node::new(ast::ClassMember::Method(
                     vec![ast::MetadataItem::simple("override")],
                     vec![],
                     ast::Function {
@@ -111,7 +116,7 @@ impl Codegen {
                         },
                         body,
                     },
-                ));
+                )));
                 Node::new(ast::Item::Class {
                     metadata: vec![],
                     abstract_: false,
@@ -127,14 +132,14 @@ impl Codegen {
         }
     }
 
-    fn codegen_field_defs(&mut self, fields: &[FieldDef]) -> Vec<ast::ClassMember> {
+    fn codegen_field_defs(&mut self, fields: &[FieldDef]) -> Vec<Node<ast::ClassMember>> {
         fields
             .iter()
             .map(|field| self.codegen_field_def(field))
             .collect()
     }
 
-    fn codegen_field_def(&mut self, field: &FieldDef) -> ast::ClassMember {
+    fn codegen_field_def(&mut self, field: &FieldDef) -> Node<ast::ClassMember> {
         let mut var_ty = Node::new(ast::Type::Infer);
         let mut var_expr = None;
         if let Some(ref ty) = field.ty {
@@ -143,7 +148,7 @@ impl Codegen {
         if let Some(ref expr) = field.default {
             var_expr = Some(self.codegen_expr(expr));
         }
-        ast::ClassMember::Fields {
+        Node::new(ast::ClassMember::Fields {
             metadata: vec![],
             static_: false,
             var_type: ast::VarType {
@@ -156,7 +161,7 @@ impl Codegen {
                     init: var_expr,
                 },
             ],
-        }
+        })
     }
 
     fn codegen_field(&mut self, field: &Field) -> ast::NamedArg {
