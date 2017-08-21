@@ -11,13 +11,10 @@ impl Codegen {
     }
 
     pub fn codegen_items(&mut self, items: &[Item]) -> Vec<Node<ast::Item>> {
-        items
-            .iter()
-            .flat_map(|item| self.codegen_item(item))
-            .collect()
+        items.iter().map(|item| self.codegen_item(item)).collect()
     }
 
-    fn codegen_item(&mut self, item: &Item) -> Vec<Node<ast::Item>> {
+    fn codegen_item(&mut self, item: &Item) -> Node<ast::Item> {
         match *item {
             Item::ComponentDef(name, ref fields, ref instance) => {
                 let params;
@@ -115,21 +112,18 @@ impl Codegen {
                         body,
                     },
                 ));
-                vec![
-                    Node::new(ast::Item::Class {
-                        metadata: vec![],
-                        abstract_: false,
-                        name,
-                        generics: vec![],
-                        superclass,
-                        mixins: vec![],
-                        interfaces: vec![],
-                        members: class_members,
-                    }),
-                ]
-
+                Node::new(ast::Item::Class {
+                    metadata: vec![],
+                    abstract_: false,
+                    name,
+                    generics: vec![],
+                    superclass,
+                    mixins: vec![],
+                    interfaces: vec![],
+                    members: class_members,
+                })
             }
-            Item::Dart(ref items) => items.clone(),
+            Item::Dart(ref item) => item.clone(),
         }
     }
 
