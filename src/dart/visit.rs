@@ -1,5 +1,5 @@
 use dart::ast::{Args, ClassMember, ConstructorInitializer, Expr, FnBody, FnSig, ForLoop, Function,
-                Item, Metadata, Statement, StringLiteral, Suffix, Type, TypeParameter};
+                Item, Metadata, Statement, StringLiteral, Suffix, Type, TypeParameter, VarDef};
 use node::Node;
 
 pub trait Visitor: Sized {
@@ -32,6 +32,9 @@ pub trait Visitor: Sized {
     }
     fn visit_statement(&mut self, statement: Node<Statement>) {
         walk_statement(self, statement)
+    }
+    fn visit_var_def(&mut self, var: Node<VarDef>) {
+        walk_var_def(self, var)
     }
     fn visit_expr(&mut self, expr: Node<Expr>) {
         walk_expr(self, expr)
@@ -122,12 +125,10 @@ pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
         Item::Function(ref function) => {
             visitor.visit_function(&function);
         }
-        Item::Global(ref var_type, ref vars) => {
+        Item::Vars(ref var_type, ref vars) => {
             visitor.visit_type(var_type.ty.clone());
-            for _var in vars {
-                if let Some(ref init) = _var.init {
-                    visitor.visit_expr(init.clone());
-                }
+            for var in vars {
+                visitor.visit_var_def(var.clone());
             }
         }
     }
@@ -173,10 +174,8 @@ pub fn walk_class_member<V: Visitor>(visitor: &mut V, class_member: &ClassMember
         } => {
             visitor.visit_metadata(metadata);
             visitor.visit_type(var_type.ty.clone());
-            for initializer in initializers {
-                if let Some(ref init) = initializer.init {
-                    visitor.visit_expr(init.clone());
-                }
+            for field in initializers {
+                visitor.visit_var_def(field.clone());
             }
         }
     }
@@ -238,12 +237,11 @@ pub fn walk_fn_sig<V: Visitor>(visitor: &mut V, sig: &FnSig) {
     visitor.visit_type(sig.return_type.clone());
     for arg in &sig.required {
         visitor.visit_type(arg.ty.ty.clone());
+        visitor.visit_var_def(arg.var.clone());
     }
     for arg in &sig.optional {
-        visitor.visit_type(arg.arg.ty.ty.clone());
-        if let Some(ref default) = arg.default {
-            visitor.visit_expr(default.clone());
-        }
+        visitor.visit_type(arg.ty.ty.clone());
+        visitor.visit_var_def(arg.var.clone());
     }
 }
 
@@ -266,12 +264,10 @@ pub fn walk_statement<V: Visitor>(visitor: &mut V, statement: Node<Statement>) {
         Statement::Block(ref statements) => for statement in statements {
             visitor.visit_statement(statement.clone());
         },
-        Statement::Var(ref var_type, ref vars) => {
+        Statement::Vars(ref var_type, ref vars) => {
             visitor.visit_type(var_type.ty.clone());
-            for _var in vars {
-                if let Some(ref init) = _var.init {
-                    visitor.visit_expr(init.clone());
-                }
+            for var in vars {
+                visitor.visit_var_def(var.clone());
             }
         }
         Statement::Function(ref function) => {
@@ -288,10 +284,12 @@ pub fn walk_statement<V: Visitor>(visitor: &mut V, statement: Node<Statement>) {
                         visitor.visit_expr(expression.clone());
                     }
                 }
-                ForLoop::In(ref var_type, _, ref expr) => {
-                    if let Some(ref var_type) = *var_type {
-                        visitor.visit_type(var_type.ty.clone());
-                    }
+                ForLoop::In(_, ref expr) => {
+                    visitor.visit_expr(expr.clone());
+                }
+                ForLoop::InVar(ref var_type, ref var, ref expr) => {
+                    visitor.visit_type(var_type.ty.clone());
+                    visitor.visit_var_def(var.clone());
                     visitor.visit_expr(expr.clone());
                 }
             }
@@ -352,6 +350,11 @@ pub fn walk_statement<V: Visitor>(visitor: &mut V, statement: Node<Statement>) {
     }
 }
 
+pub fn walk_var_def<V: Visitor>(visitor: &mut V, var: Node<VarDef>) {
+    if let Some(ref init) = var.init {
+        visitor.visit_expr(init.clone());
+    }
+}
 pub fn walk_expr<V: Visitor>(visitor: &mut V, expr: Node<Expr>) {
     match *expr {
         Expr::Unary(_, ref expr) => visitor.visit_expr(expr.clone()),

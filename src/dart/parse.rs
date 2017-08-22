@@ -860,12 +860,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     if self.is_punctuation(']') {
                         break;
                     }
-                    let arg = self.dart_arg_def()?;
-                    let mut default = None;
-                    if self.eat_punctuation('=') {
-                        default = Some(self.dart_expr()?);
-                    }
-                    sig.optional.push(OptionalArgDef { arg, default });
+                    sig.optional.push(self.dart_arg_def(&['='])?);
                     if !self.eat_punctuation(',') {
                         break;
                     }
@@ -879,12 +874,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     if self.is_punctuation('}') {
                         break;
                     }
-                    let arg = self.dart_arg_def()?;
-                    let mut default = None;
-                    if self.eat_punctuation(':') || self.eat_punctuation('=') {
-                        default = Some(self.dart_expr()?);
-                    }
-                    sig.optional.push(OptionalArgDef { arg, default });
+                    sig.optional.push(self.dart_arg_def(&[':', '='])?);
                     if !self.eat_punctuation(',') {
                         break;
                     }
@@ -892,7 +882,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 self.expect_punctuation('}')?;
                 break;
             }
-            sig.required.push(self.dart_arg_def()?);
+            sig.required.push(self.dart_arg_def(&[])?);
             if !self.eat_punctuation(',') {
                 break;
             }
@@ -908,7 +898,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(sig)
     }
 
-    fn dart_arg_def(&mut self) -> ParseResult<ArgDef> {
+    fn dart_arg_def(&mut self, default_separators: &[char]) -> ParseResult<ArgDef> {
         let metadata = self.dart_metadata()?;
         let covariant = self.eat_keyword("covariant");
         let mut ty = self.dart_var_type(false)?;
@@ -921,12 +911,19 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         if self.is_punctuation('(') {
             ty.ty = Node::new(Type::FunctionOld(self.dart_fn_args(ty.ty)?));
         }
+        let mut init = None;
+        for &separator in default_separators {
+            if self.eat_punctuation(separator) {
+                init = Some(self.dart_expr()?);
+                break;
+            }
+        }
         Ok(ArgDef {
             metadata,
             covariant,
             ty,
             field,
-            name,
+            var: Node::new(VarDef { name, init }),
         })
     }
 
@@ -1018,7 +1015,16 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 let var_type = p.try(|p| p.dart_var_type(true));
                 let name = p.parse_ident()?;
                 p.expect_keyword("in")?;
-                Ok(ForLoop::In(var_type, name, p.dart_expr()?))
+                let expr = p.dart_expr()?;
+                if let Some(var_type) = var_type {
+                    Ok(ForLoop::InVar(
+                        var_type,
+                        Node::new(VarDef { name, init: None }),
+                        expr,
+                    ))
+                } else {
+                    Ok(ForLoop::In(name, expr))
+                }
             }).ok_or(())
                 .or_else(|_| -> ParseResult<_> {
                     let statement = self.dart_statement()?;
@@ -1199,10 +1205,9 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
         let var_stmt = self.try(|p| {
             let var_type = p.dart_var_type(true)?;
-            let names_and_initializers =
-                p.dart_one_or_more(',', |p| p.dart_name_and_initializer())?;
+            let vars = p.dart_one_or_more(',', |p| p.dart_name_and_initializer())?;
             p.expect_punctuation(';')?;
-            Ok(Node::new(Statement::Var(var_type, names_and_initializers)))
+            Ok(Node::new(Statement::Vars(var_type, vars)))
         });
         if let Some(var_stmt) = var_stmt {
             return Ok(var_stmt);
@@ -1254,14 +1259,14 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         })
     }
 
-    fn dart_name_and_initializer(&mut self) -> ParseResult<NameAndInitializer> {
+    fn dart_name_and_initializer(&mut self) -> ParseResult<Node<VarDef>> {
         let name = self.parse_ident()?;
         let init = if self.eat_punctuation('=') {
             Some(self.dart_expr()?)
         } else {
             None
         };
-        Ok(NameAndInitializer { name, init })
+        Ok(Node::new(VarDef { name, init }))
     }
 
     fn dart_constructor_initializer(&mut self) -> ParseResult<ConstructorInitializer> {
@@ -1518,7 +1523,9 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             }));
         }
         let function = self.dart_function(false)?;
-        Ok(Node::new(ClassMember::Method(metadata, method_qualifiers, function)))
+        Ok(Node::new(
+            ClassMember::Method(metadata, method_qualifiers, function),
+        ))
     }
 
     pub fn dart_item(&mut self) -> ParseResult<Node<Item>> {
@@ -1689,7 +1696,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             let names_and_initializers =
                 p.dart_one_or_more(',', |p| p.dart_name_and_initializer())?;
             p.expect_punctuation(';')?;
-            Ok(Node::new(Item::Global(var_type, names_and_initializers)))
+            Ok(Node::new(Item::Vars(var_type, names_and_initializers)))
         }).ok_or(())
             .or_else(|_| {
                 Ok(Node::new(Item::Function(self.dart_function(false)?)))
