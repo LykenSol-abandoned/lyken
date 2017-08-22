@@ -50,7 +50,7 @@ pub enum Item {
         ty: Node<Type>,
     },
     Function(Function),
-    Global(VarType, Vec<NameAndInitializer>),
+    Vars(VarType, Vec<Node<VarDef>>),
 }
 
 #[derive(Debug)]
@@ -97,7 +97,7 @@ pub enum ClassMember {
         metadata: Metadata,
         static_: bool,
         var_type: VarType,
-        initializers: Vec<NameAndInitializer>,
+        initializers: Vec<Node<VarDef>>,
     },
 }
 
@@ -388,7 +388,7 @@ pub type Metadata = Vec<MetadataItem>;
 pub struct FnSig {
     pub return_type: Node<Type>,
     pub required: Vec<ArgDef>,
-    pub optional: Vec<OptionalArgDef>,
+    pub optional: Vec<ArgDef>,
     pub optional_kind: OptionalArgKind,
     pub async: bool,
     pub generator: bool,
@@ -432,7 +432,7 @@ pub struct ArgDef {
     pub covariant: bool,
     pub ty: VarType,
     pub field: bool,
-    pub name: Symbol,
+    pub var: Node<VarDef>,
 }
 
 impl ArgDef {
@@ -445,15 +445,12 @@ impl ArgDef {
                 ty,
             },
             field: false,
-            name: Symbol::intern(name),
+            var: Node::new(VarDef {
+                name: Symbol::intern(name),
+                init: None,
+            }),
         }
     }
-}
-
-#[derive(Debug)]
-pub struct OptionalArgDef {
-    pub arg: ArgDef,
-    pub default: Option<Node<Expr>>,
 }
 
 #[derive(Debug)]
@@ -470,7 +467,7 @@ pub enum FinalConstVar {
 }
 
 #[derive(Debug)]
-pub struct NameAndInitializer {
+pub struct VarDef {
     pub name: Symbol,
     pub init: Option<Node<Expr>>,
 }
@@ -478,7 +475,8 @@ pub struct NameAndInitializer {
 #[derive(Debug)]
 pub enum ForLoop {
     CLike(Node<Statement>, Option<Node<Expr>>, Vec<Node<Expr>>),
-    In(Option<VarType>, Symbol, Node<Expr>),
+    In(Symbol, Node<Expr>),
+    InVar(VarType, Node<VarDef>, Node<Expr>),
 }
 
 #[derive(Debug)]
@@ -504,7 +502,7 @@ pub struct TryPart {
 #[derive(Debug)]
 pub enum Statement {
     Block(Vec<Node<Statement>>),
-    Var(VarType, Vec<NameAndInitializer>),
+    Vars(VarType, Vec<Node<VarDef>>),
     Function(Function),
     For(bool, ForLoop, Node<Statement>),
     While(Node<Expr>, Node<Statement>),

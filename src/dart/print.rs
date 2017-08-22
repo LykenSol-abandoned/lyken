@@ -29,11 +29,13 @@ impl Printer {
     pub fn new() -> Self {
         Printer {
             tokens: vec![],
-            open_boxes: vec![LayoutBox {
-                children: vec![],
-                enter: 0,
-                exit: 0,
-            }],
+            open_boxes: vec![
+                LayoutBox {
+                    children: vec![],
+                    enter: 0,
+                    exit: 0,
+                },
+            ],
         }
     }
 
@@ -300,8 +302,8 @@ impl Printer {
             Item::Function(ref func) => {
                 self.dart_function(func);
             }
-            Item::Global(ref ty, ref name_and_init) => {
-                self.dart_var_decl(ty, name_and_init);
+            Item::Vars(ref ty, ref vars) => {
+                self.dart_vars(ty, vars);
             }
         }
     }
@@ -318,8 +320,8 @@ impl Printer {
                 self.exit();
                 self.print_str("}");
             }
-            Statement::Var(ref ty, ref name_and_init) => {
-                self.dart_var_decl(ty, name_and_init);
+            Statement::Vars(ref ty, ref name_and_init) => {
+                self.dart_vars(ty, name_and_init);
             }
             Statement::Function(ref func) => {
                 self.dart_function(func);
@@ -344,12 +346,13 @@ impl Printer {
                             }
                         }
                     }
-                    ForLoop::In(ref ty, name, ref expr) => {
-                        if let Some(ref ty) = *ty {
-                            self.dart_var_decl(ty, &[NameAndInitializer { name, init: None }]);
-                        } else {
-                            self.print_ident(name);
-                        }
+                    ForLoop::In(name, ref expr) => {
+                        self.print_ident(name);
+                        self.print_str(" in ");
+                        self.dart_expr(expr);
+                    }
+                    ForLoop::InVar(ref ty, ref var, ref expr) => {
+                        self.dart_vars(ty, &[var.clone()]);
                         self.print_str(" in ");
                         self.dart_expr(expr);
                     }
@@ -776,13 +779,7 @@ impl Printer {
         }
     }
 
-    fn dart_typed_name(
-        &mut self,
-        ty: &Type,
-        prefix: &str,
-        name: Symbol,
-        params: &[TypeParameter],
-    ) {
+    fn dart_typed_name(&mut self, ty: &Type, prefix: &str, name: Symbol, params: &[TypeParameter]) {
         match *ty {
             Type::Path(..) | Type::Infer | Type::Function(..) => {
                 self.dart_type_spaced(ty);
@@ -843,7 +840,7 @@ impl Printer {
     fn dart_fn_args(&mut self, args: &FnSig) {
         self.print_str("(");
         for (i, it) in args.required.iter().enumerate() {
-            self.dart_normal_formal_parameter(it);
+            self.dart_arg_def(it);
             if i < args.required.len() - 1 {
                 self.print_str(", ");
             }
@@ -852,9 +849,9 @@ impl Printer {
             match args.optional_kind {
                 OptionalArgKind::Positional => {
                     self.print_str("[");
-                    for (i, it) in args.optional.iter().enumerate() {
-                        self.dart_normal_formal_parameter(&it.arg);
-                        if let Some(ref expr) = it.default {
+                    for (i, arg) in args.optional.iter().enumerate() {
+                        self.dart_arg_def(arg);
+                        if let Some(ref expr) = arg.var.init {
                             self.print_str(" = ");
                             self.dart_expr(expr);
                         }
@@ -866,10 +863,10 @@ impl Printer {
                 }
                 OptionalArgKind::Named => {
                     self.print_str("{");
-                    for (i, it) in args.optional.iter().enumerate() {
-                        self.dart_normal_formal_parameter(&it.arg);
-                        if let Some(ref expr) = it.default {
-                            self.print_str(" : ");
+                    for (i, arg) in args.optional.iter().enumerate() {
+                        self.dart_arg_def(arg);
+                        if let Some(ref expr) = arg.var.init {
+                            self.print_str(": ");
                             self.dart_expr(expr);
                         }
                         if i < args.optional.len() - 1 {
@@ -895,7 +892,7 @@ impl Printer {
         }
     }
 
-    fn dart_normal_formal_parameter(&mut self, param: &ArgDef) {
+    fn dart_arg_def(&mut self, param: &ArgDef) {
         self.dart_metadata(&param.metadata);
         match param.ty.fcv {
             FinalConstVar::Final => self.print_str("final "),
@@ -903,13 +900,13 @@ impl Printer {
             FinalConstVar::Var => {}
         }
         if param.field {
-            self.dart_typed_name(&param.ty.ty, "this.", param.name, &[]);
+            self.dart_typed_name(&param.ty.ty, "this.", param.var.name, &[]);
         } else {
-            self.dart_typed_name(&param.ty.ty, "", param.name, &[]);
+            self.dart_typed_name(&param.ty.ty, "", param.var.name, &[]);
         }
     }
 
-    fn dart_var_decl(&mut self, var_ty: &VarType, vars: &[NameAndInitializer]) {
+    fn dart_vars(&mut self, var_ty: &VarType, vars: &[Node<VarDef>]) {
         match var_ty.fcv {
             FinalConstVar::Final => self.print_str("final "),
             FinalConstVar::Const => self.print_str("const "),
@@ -927,7 +924,7 @@ impl Printer {
         self.print_str(";");
     }
 
-    fn dart_name_and_initializer(&mut self, ident: &NameAndInitializer) {
+    fn dart_name_and_initializer(&mut self, ident: &VarDef) {
         self.print_ident(ident.name);
         if let Some(ref x) = ident.init {
             self.print_str(" = ");
@@ -1060,7 +1057,7 @@ impl Printer {
                 if static_ {
                     self.print_str("static ");
                 }
-                self.dart_var_decl(var_type, initializers);
+                self.dart_vars(var_type, initializers);
             }
         }
     }

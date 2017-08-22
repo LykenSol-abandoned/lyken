@@ -27,16 +27,14 @@ impl Codegen {
                 let mut class_members = vec![];
                 superclass = Some(ast::Type::simple_path("StatelessWidget"));
                 if !fields.is_empty() {
-                    let mut normal = vec![];
-                    let mut default = vec![];
-                    normal.push(ast::ArgDef::simple(ast::Type::simple_path("Key"), "key"));
+                    let mut args = vec![ast::ArgDef::simple(ast::Type::simple_path("Key"), "key")];
 
                     for field in fields {
                         let mut var_ty = Node::new(ast::Type::Infer);
                         if let Some(ref ty) = field.ty {
                             var_ty = self.codegen_type(ty);
                         }
-                        let arg = ast::ArgDef {
+                        args.push(ast::ArgDef {
                             metadata: vec![],
                             covariant: false,
                             ty: ast::VarType {
@@ -44,21 +42,19 @@ impl Codegen {
                                 ty: var_ty,
                             },
                             field: true,
-                            name: field.name,
-                        };
-                        if let Some(ref value) = field.default {
-                            default.push(ast::OptionalArgDef {
-                                arg,
-                                default: Some(self.codegen_expr(value)),
-                            });
-                        } else {
-                            normal.push(arg);
-                        }
+                            var: Node::new(ast::VarDef {
+                                name: field.name,
+                                init: field
+                                    .default
+                                    .as_ref()
+                                    .map(|default| self.codegen_expr(default)),
+                            }),
+                        });
                     }
                     params = ast::FnSig {
                         return_type: Node::new(ast::Type::Infer),
-                        required: normal,
-                        optional: default,
+                        required: vec![],
+                        optional: args,
                         optional_kind: ast::OptionalArgKind::Named,
                         async: false,
                         generator: false,
@@ -156,10 +152,10 @@ impl Codegen {
                 ty: var_ty,
             },
             initializers: vec![
-                ast::NameAndInitializer {
+                Node::new(ast::VarDef {
                     name: field.name,
                     init: var_expr,
-                },
+                }),
             ],
         })
     }
