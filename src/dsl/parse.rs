@@ -11,7 +11,9 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
     }
 
     fn dsl_expr(&mut self) -> ParseResult<Expr> {
-        if self.probe(|p| p.parse_ident().is_ok() && p.eat_punctuation('{')) {
+        if self.probe(|p| {
+            p.parse_ident().is_ok() && (p.eat_punctuation('(') || p.eat_punctuation('{'))
+        }) {
             return Ok(Expr::Instance(self.dsl_instance()?));
         }
         if self.eat_punctuation('[') {
@@ -81,10 +83,28 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
 
     fn dsl_instance(&mut self) -> ParseResult<Instance> {
         let name = self.parse_ident()?;
-        self.expect_punctuation('{')?;
-        let fields = self.dsl_fields()?;
-        self.expect_punctuation('}')?;
-        Ok(Instance { name, fields })
+        let (unnamed, fields) = if self.eat_punctuation('(') {
+            let unnamed = self.parse_one_or_more(',', |p| p.dsl_expr())?;
+            self.expect_punctuation(')')?;
+            let fields = if self.eat_punctuation('{') {
+                let fields = self.dsl_fields()?;
+                self.expect_punctuation('}')?;
+                fields
+            } else {
+                vec![]
+            };
+            (unnamed, fields)
+        } else {
+            self.expect_punctuation('{')?;
+            let fields = self.dsl_fields()?;
+            self.expect_punctuation('}')?;
+            (vec![], fields)
+        };
+        Ok(Instance {
+            name,
+            unnamed,
+            fields,
+        })
     }
 
 

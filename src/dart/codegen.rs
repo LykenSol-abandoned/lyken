@@ -190,7 +190,12 @@ impl Codegen {
     }
 
     fn codegen_instance(&mut self, instance: &Instance) -> Node<ast::Expr> {
-        let args = instance
+        let unnamed = instance
+            .unnamed
+            .iter()
+            .map(|expr| self.codegen_expr(expr))
+            .collect();
+        let named = instance
             .fields
             .iter()
             .map(|field| self.codegen_field(field))
@@ -205,10 +210,7 @@ impl Codegen {
                 vec![],
             )),
             ctor: None,
-            args: ast::Args {
-                unnamed: vec![],
-                named: args,
-            },
+            args: ast::Args { unnamed, named },
         })
     }
 }
