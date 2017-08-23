@@ -42,16 +42,30 @@ impl Printer {
 
     fn dsl_instance(&mut self, instance: &Instance) {
         self.print_ident(instance.name);
-        self.print_str(" {");
-        self.enter();
-        for (i, field) in instance.fields.iter().enumerate() {
-            self.dsl_field(field);
-            if i < instance.fields.len() - 1 {
-                self.print_str(", ");
+        if !instance.unnamed.is_empty() {
+            self.print_str("(");
+            self.enter();
+            for (i, unnamed_item) in instance.unnamed.iter().enumerate() {
+                self.dsl_expr(unnamed_item);
+                if i < instance.unnamed.len() - 1 {
+                    self.print_str(", ");
+                }
             }
+            self.exit();
+            self.print_str(")");
         }
-        self.exit();
-        self.print_str("}");
+        if !instance.fields.is_empty() {
+            self.print_str(" {");
+            self.enter();
+            for (i, field) in instance.fields.iter().enumerate() {
+                self.dsl_field(field);
+                if i < instance.fields.len() - 1 {
+                    self.print_str(", ");
+                }
+            }
+            self.exit();
+            self.print_str("}");
+        }
     }
 
     fn dsl_field_def(&mut self, field: &FieldDef) {

@@ -14,6 +14,7 @@ pub enum Item {
 
 pub struct Instance {
     pub name: Symbol,
+    pub unnamed: Vec<Expr>,
     pub fields: Vec<Field>,
 }
 

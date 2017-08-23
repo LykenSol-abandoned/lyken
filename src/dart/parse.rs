@@ -261,7 +261,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
     }
 
-    fn dart_one_or_more<F: FnMut(&mut Self) -> ParseResult<T>, T>(
+    pub fn parse_one_or_more<F: FnMut(&mut Self) -> ParseResult<T>, T>(
         &mut self,
         delim: char,
         mut f: F,
@@ -319,7 +319,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
 
     fn dart_type_params(&mut self) -> ParseResult<Vec<Node<Type>>> {
         self.expect_punctuation('<')?;
-        let type_args = self.dart_one_or_more(',', |p| p.dart_type())?;
+        let type_args = self.parse_one_or_more(',', |p| p.dart_type())?;
         self.expect_punctuation('>')?;
         Ok(type_args)
     }
@@ -1037,7 +1037,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     let exprs = if self.is_punctuation(')') {
                         vec![]
                     } else {
-                        self.dart_one_or_more(',', |p| p.dart_expr())?
+                        self.parse_one_or_more(',', |p| p.dart_expr())?
                     };
                     Ok(ForLoop::CLike(statement, cond, exprs))
                 })?;
@@ -1205,7 +1205,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         }
         let var_stmt = self.try(|p| {
             let var_type = p.dart_var_type(true)?;
-            let vars = p.dart_one_or_more(',', |p| p.dart_name_and_initializer())?;
+            let vars = p.parse_one_or_more(',', |p| p.dart_name_and_initializer())?;
             p.expect_punctuation(';')?;
             Ok(Node::new(Statement::Vars(var_type, vars)))
         });
@@ -1384,7 +1384,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             )?;
         let mut generics = vec![];
         if self.eat_punctuation('<') {
-            generics = self.dart_one_or_more(',', |p| p.dart_type_param_def())?;
+            generics = self.parse_one_or_more(',', |p| p.dart_type_param_def())?;
             self.expect_punctuation('>')?;
         }
         let sig = {
@@ -1464,7 +1464,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 }));
             }
             let initializers = if self.eat_punctuation(':') {
-                self.dart_one_or_more(',', |p| p.dart_constructor_initializer())?
+                self.parse_one_or_more(',', |p| p.dart_constructor_initializer())?
             } else {
                 vec![]
             };
@@ -1509,7 +1509,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                     }
                     Ok(Node::new(Type::Infer))
                 })?;
-            let initializers = p.dart_one_or_more(',', |p| p.dart_name_and_initializer())?;
+            let initializers = p.parse_one_or_more(',', |p| p.dart_name_and_initializer())?;
             p.expect_punctuation(';')?;
             Ok((VarType { fcv, ty }, initializers))
         });
@@ -1532,7 +1532,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         let metadata = self.dart_metadata()?;
 
         if self.eat_keyword("library") {
-            let path = self.dart_one_or_more('.', |p| p.parse_ident())?;
+            let path = self.parse_one_or_more('.', |p| p.parse_ident())?;
             self.expect_punctuation(';')?;
             return Ok(Node::new(Item::LibraryName { metadata, path }));
         }
@@ -1575,7 +1575,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
 
         if self.eat_keyword("part") {
             if self.eat_keyword("of") {
-                let path = self.dart_one_or_more('.', |p| p.parse_ident())?;
+                let path = self.parse_one_or_more('.', |p| p.parse_ident())?;
                 self.expect_punctuation(';')?;
                 return Ok(Node::new(Item::PartOf { metadata, path }));
             }
@@ -1590,13 +1590,13 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             let class_name = self.parse_ident()?;
             let mut generics = vec![];
             if self.eat_punctuation('<') {
-                generics = self.dart_one_or_more(',', |p| p.dart_type_param_def())?;
+                generics = self.parse_one_or_more(',', |p| p.dart_type_param_def())?;
                 self.expect_punctuation('>')?;
             }
             let (superclass, mixins) = if self.eat_keyword("extends") {
                 let superclass = Some(self.dart_type()?);
                 let mixins = if self.eat_keyword("with") {
-                    self.dart_one_or_more(',', |p| p.dart_type())?
+                    self.parse_one_or_more(',', |p| p.dart_type())?
                 } else {
                     vec![]
                 };
@@ -1605,7 +1605,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 (None, vec![])
             };
             let interfaces = if self.eat_keyword("implements") {
-                self.dart_one_or_more(',', |p| p.dart_type())?
+                self.parse_one_or_more(',', |p| p.dart_type())?
             } else {
                 vec![]
             };
@@ -1631,9 +1631,9 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 self.expect_punctuation('=')?;
                 let mut mixins = vec![self.dart_type()?];
                 self.expect_keyword("with")?;
-                mixins.extend(self.dart_one_or_more(',', |p| p.dart_type())?);
+                mixins.extend(self.parse_one_or_more(',', |p| p.dart_type())?);
                 let interfaces = if self.eat_keyword("implements") {
-                    self.dart_one_or_more(',', |p| p.dart_type())?
+                    self.parse_one_or_more(',', |p| p.dart_type())?
                 } else {
                     vec![]
                 };
@@ -1677,7 +1677,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 )?;
             let mut generics = vec![];
             if self.eat_punctuation('<') {
-                generics = self.dart_one_or_more(',', |p| p.dart_type_param_def())?;
+                generics = self.parse_one_or_more(',', |p| p.dart_type_param_def())?;
                 self.expect_punctuation('>')?;
             }
             let sig = self.dart_fn_args(return_type)?;
@@ -1694,7 +1694,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         self.try(|p| {
             let var_type = p.dart_var_type(true)?;
             let names_and_initializers =
-                p.dart_one_or_more(',', |p| p.dart_name_and_initializer())?;
+                p.parse_one_or_more(',', |p| p.dart_name_and_initializer())?;
             p.expect_punctuation(';')?;
             Ok(Node::new(Item::Vars(var_type, names_and_initializers)))
         }).ok_or(())
