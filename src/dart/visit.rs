@@ -50,27 +50,121 @@ pub trait Visitor: Sized {
     }
 }
 
+pub trait Visit {
+    fn visit<V: Visitor>(&self, visitor: &mut V);
+}
+
+impl Visit for Item {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_item(self);
+    }
+}
+
+impl Visit for ClassMember {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_class_member(self);
+    }
+}
+
+impl Visit for ConstructorInitializer {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_constructor_initializer(self);
+    }
+}
+
+impl Visit for Metadata {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_metadata(self);
+    }
+}
+
+impl Visit for [TypeParameter] {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_generics(self);
+    }
+}
+
+impl Visit for Node<Type> {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_type(self.clone());
+    }
+}
+
+impl Visit for Function {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_function(self);
+    }
+}
+
+impl Visit for FnSig {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_fn_sig(self);
+    }
+}
+
+impl Visit for FnBody {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_fn_body(self);
+    }
+}
+
+impl Visit for Node<Statement> {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_statement(self.clone());
+    }
+}
+
+impl Visit for Node<VarDef> {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_var_def(self.clone());
+    }
+}
+
+impl Visit for Node<Expr> {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_expr(self.clone());
+    }
+}
+
+impl Visit for Args {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_args(self);
+    }
+}
+
+impl Visit for Suffix {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_suffix(self);
+    }
+}
+
+impl Visit for StringLiteral {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_string_literal(self);
+    }
+}
+
 pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
     match *item {
         Item::LibraryName { ref metadata, .. } |
         Item::PartOf { ref metadata, .. } |
         Item::Enum { ref metadata, .. } => {
-            visitor.visit_metadata(metadata);
+            metadata.visit(visitor);
         }
         Item::Import(ref metadata, ref import) => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_string_literal(&import.uri);
+            metadata.visit(visitor);
+            import.uri.visit(visitor);
         }
         Item::Export(ref metadata, ref string_literal, _) => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_string_literal(string_literal);
+            metadata.visit(visitor);
+            string_literal.visit(visitor);
         }
         Item::Part {
             ref metadata,
             ref uri,
         } => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_string_literal(uri);
+            metadata.visit(visitor);
+            uri.visit(visitor);
         }
         Item::Class {
             ref metadata,
@@ -81,19 +175,19 @@ pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
             ref members,
             ..
         } => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_generics(generics);
+            metadata.visit(visitor);
+            generics.visit(visitor);
             if let Some(ref superclass) = *superclass {
-                visitor.visit_type(superclass.clone());
+                superclass.visit(visitor);
             }
             for mixin in mixins {
-                visitor.visit_type(mixin.clone());
+                mixin.visit(visitor);
             }
             for interface in interfaces {
-                visitor.visit_type(interface.clone());
+                interface.visit(visitor);
             }
             for member in members {
-                visitor.visit_class_member(member);
+                member.visit(visitor);
             }
         }
         Item::MixinClass {
@@ -103,13 +197,13 @@ pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
             ref interfaces,
             ..
         } => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_generics(generics);
+            metadata.visit(visitor);
+            generics.visit(visitor);
             for mixin in mixins {
-                visitor.visit_type(mixin.clone());
+                mixin.visit(visitor);
             }
             for interface in interfaces {
-                visitor.visit_type(interface.clone());
+                interface.visit(visitor);
             }
         }
         Item::TypeAlias {
@@ -118,17 +212,17 @@ pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
             ref ty,
             ..
         } => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_generics(generics);
-            visitor.visit_type(ty.clone());
+            metadata.visit(visitor);
+            generics.visit(visitor);
+            ty.visit(visitor);
         }
         Item::Function(ref function) => {
-            visitor.visit_function(&function);
+            function.visit(visitor);
         }
         Item::Vars(ref var_type, ref vars) => {
-            visitor.visit_type(var_type.ty.clone());
+            var_type.ty.visit(visitor);
             for var in vars {
-                visitor.visit_var_def(var.clone());
+                var.visit(visitor);
             }
         }
     }
@@ -142,9 +236,9 @@ pub fn walk_class_member<V: Visitor>(visitor: &mut V, class_member: &ClassMember
             ref ty,
             ..
         } => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_fn_sig(sig);
-            visitor.visit_type(ty.clone());
+            metadata.visit(visitor);
+            sig.visit(visitor);
+            ty.visit(visitor);
         }
         ClassMember::Constructor {
             ref metadata,
@@ -153,18 +247,18 @@ pub fn walk_class_member<V: Visitor>(visitor: &mut V, class_member: &ClassMember
             ref function_body,
             ..
         } => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_fn_sig(sig);
+            metadata.visit(visitor);
+            sig.visit(visitor);
             for initializer in initializers {
-                visitor.visit_constructor_initializer(initializer);
+                initializer.visit(visitor);
             }
             if let Some(ref function_body) = *function_body {
-                visitor.visit_fn_body(function_body);
+                function_body.visit(visitor);
             }
         }
         ClassMember::Method(ref metadata, _, ref function) => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_function(function);
+            metadata.visit(visitor);
+            function.visit(visitor);
         }
         ClassMember::Fields {
             ref metadata,
@@ -172,10 +266,10 @@ pub fn walk_class_member<V: Visitor>(visitor: &mut V, class_member: &ClassMember
             ref initializers,
             ..
         } => {
-            visitor.visit_metadata(metadata);
-            visitor.visit_type(var_type.ty.clone());
+            metadata.visit(visitor);
+            var_type.ty.visit(visitor);
             for field in initializers {
-                visitor.visit_var_def(field.clone());
+                field.visit(visitor);
             }
         }
     }
@@ -189,10 +283,10 @@ pub fn walk_constructor_initializer<V: Visitor>(
         ConstructorInitializer::Super(_, ref args) |
         ConstructorInitializer::This(_, ref args) |
         ConstructorInitializer::Assert(ref args) => {
-            visitor.visit_args(args);
+            args.visit(visitor);
         }
         ConstructorInitializer::Field(_, _, ref expr) => {
-            visitor.visit_expr(expr.clone());
+            expr.visit(visitor);
         }
     }
 }
@@ -200,7 +294,7 @@ pub fn walk_constructor_initializer<V: Visitor>(
 pub fn walk_metadata<V: Visitor>(visitor: &mut V, metadata: &Metadata) {
     for metadata_item in metadata {
         if let Some(ref arguments) = metadata_item.arguments {
-            visitor.visit_args(arguments);
+            arguments.visit(visitor);
         }
     }
 }
@@ -208,7 +302,7 @@ pub fn walk_metadata<V: Visitor>(visitor: &mut V, metadata: &Metadata) {
 pub fn walk_generics<V: Visitor>(visitor: &mut V, generics: &[TypeParameter]) {
     for generic in generics {
         if let Some(ref extension) = generic.extends {
-            visitor.visit_type(extension.clone());
+            extension.visit(visitor);
         }
     }
 }
@@ -216,45 +310,45 @@ pub fn walk_generics<V: Visitor>(visitor: &mut V, generics: &[TypeParameter]) {
 pub fn walk_type<V: Visitor>(visitor: &mut V, ty: Node<Type>) {
     match *ty {
         Type::Path(_, ref params) => for ty in params {
-            visitor.visit_type(ty.clone());
+            ty.visit(visitor);
         },
         Type::FunctionOld(ref sig) | Type::Function(ref sig) => {
-            visitor.visit_fn_sig(sig);
+            sig.visit(visitor);
         }
         Type::Infer => {}
     }
 }
 
 pub fn walk_function<V: Visitor>(visitor: &mut V, function: &Function) {
-    visitor.visit_generics(&function.generics);
-    visitor.visit_fn_sig(&function.sig);
+    function.generics.visit(visitor);
+    function.sig.visit(visitor);
     if let Some(ref body) = function.body {
-        visitor.visit_fn_body(body);
+        body.visit(visitor);
     }
 }
 
 pub fn walk_fn_sig<V: Visitor>(visitor: &mut V, sig: &FnSig) {
-    visitor.visit_type(sig.return_type.clone());
+    sig.return_type.visit(visitor);
     for arg in &sig.required {
-        visitor.visit_type(arg.ty.ty.clone());
-        visitor.visit_var_def(arg.var.clone());
+        arg.ty.ty.visit(visitor);
+        arg.var.visit(visitor);
     }
     for arg in &sig.optional {
-        visitor.visit_type(arg.ty.ty.clone());
-        visitor.visit_var_def(arg.var.clone());
+        arg.ty.ty.visit(visitor);
+        arg.var.visit(visitor);
     }
 }
 
 pub fn walk_fn_body<V: Visitor>(visitor: &mut V, fn_body: &FnBody) {
     match *fn_body {
         FnBody::Arrow(ref expr) => {
-            visitor.visit_expr(expr.clone());
+            expr.visit(visitor);
         }
         FnBody::Block(ref statement) => {
-            visitor.visit_statement(statement.clone());
+            statement.visit(visitor);
         }
         FnBody::Native(ref string_literal) => if let Some(ref string_literal) = *string_literal {
-            visitor.visit_string_literal(string_literal);
+            string_literal.visit(visitor);
         },
     }
 }
@@ -262,125 +356,125 @@ pub fn walk_fn_body<V: Visitor>(visitor: &mut V, fn_body: &FnBody) {
 pub fn walk_statement<V: Visitor>(visitor: &mut V, statement: Node<Statement>) {
     match *statement {
         Statement::Block(ref statements) => for statement in statements {
-            visitor.visit_statement(statement.clone());
+            statement.visit(visitor);
         },
         Statement::Vars(ref var_type, ref vars) => {
-            visitor.visit_type(var_type.ty.clone());
+            var_type.ty.visit(visitor);
             for var in vars {
-                visitor.visit_var_def(var.clone());
+                var.visit(visitor);
             }
         }
         Statement::Function(ref function) => {
-            visitor.visit_function(function.clone());
+            function.visit(visitor);
         }
         Statement::For(_, ref for_loop, ref statement) => {
             match *for_loop {
                 ForLoop::CLike(ref statement, ref expr, ref expressions) => {
-                    visitor.visit_statement(statement.clone());
+                    statement.visit(visitor);
                     if let Some(ref expr) = *expr {
-                        visitor.visit_expr(expr.clone());
+                        expr.visit(visitor);
                     }
                     for expression in expressions {
-                        visitor.visit_expr(expression.clone());
+                        expression.visit(visitor);
                     }
                 }
                 ForLoop::In(_, ref expr) => {
-                    visitor.visit_expr(expr.clone());
+                    expr.visit(visitor);
                 }
                 ForLoop::InVar(ref var_type, ref var, ref expr) => {
-                    visitor.visit_type(var_type.ty.clone());
-                    visitor.visit_var_def(var.clone());
-                    visitor.visit_expr(expr.clone());
+                    var_type.ty.visit(visitor);
+                    var.visit(visitor);
+                    expr.visit(visitor);
                 }
             }
-            visitor.visit_statement(statement.clone());
+            statement.visit(visitor);
         }
         Statement::While(ref expr, ref statement) => {
-            visitor.visit_expr(expr.clone());
-            visitor.visit_statement(statement.clone());
+            expr.visit(visitor);
+            statement.visit(visitor);
         }
         Statement::DoWhile(ref statement, ref expr) => {
-            visitor.visit_statement(statement.clone());
-            visitor.visit_expr(expr.clone());
+            statement.visit(visitor);
+            expr.visit(visitor);
         }
         Statement::Switch(ref expr, ref cases) => {
-            visitor.visit_expr(expr.clone());
+            expr.visit(visitor);
             for case in cases {
                 if let Some(ref value) = case.value {
-                    visitor.visit_expr(value.clone());
+                    value.visit(visitor);
                 }
                 for statement in &case.statements {
-                    visitor.visit_statement(statement.clone());
+                    statement.visit(visitor);
                 }
             }
         }
         Statement::If(ref expr, ref statement, ref optional_statement) => {
-            visitor.visit_expr(expr.clone());
-            visitor.visit_statement(statement.clone());
+            expr.visit(visitor);
+            statement.visit(visitor);
             if let Some(ref optional_statement) = *optional_statement {
-                visitor.visit_statement(optional_statement.clone());
+                optional_statement.visit(visitor);
             }
         }
         Statement::Rethrow => {}
         Statement::Try(ref statement, ref try_parts) => {
-            visitor.visit_statement(statement.clone());
+            statement.visit(visitor);
             for try_part in try_parts {
                 if let Some(ref on) = try_part.on {
-                    visitor.visit_type(on.clone());
+                    on.visit(visitor);
                 }
-                visitor.visit_statement(try_part.block.clone());
+                try_part.block.visit(visitor);
             }
         }
         Statement::Break(_) => {}
         Statement::Continue(_) => {}
         Statement::Return(ref expr) | Statement::Expression(ref expr) => {
             if let Some(ref expr) = *expr {
-                visitor.visit_expr(expr.clone());
+                expr.visit(visitor);
             }
         }
         Statement::Yield(ref expr) | Statement::YieldEach(ref expr) => {
-            visitor.visit_expr(expr.clone());
+            expr.visit(visitor);
         }
         Statement::Assert(ref args) => {
-            visitor.visit_args(args);
+            args.visit(visitor);
         }
         Statement::Labelled(_, ref statement) => {
-            visitor.visit_statement(statement.clone());
+            statement.visit(visitor);
         }
     }
 }
 
 pub fn walk_var_def<V: Visitor>(visitor: &mut V, var: Node<VarDef>) {
     if let Some(ref init) = var.init {
-        visitor.visit_expr(init.clone());
+        init.visit(visitor);
     }
 }
 pub fn walk_expr<V: Visitor>(visitor: &mut V, expr: Node<Expr>) {
     match *expr {
-        Expr::Unary(_, ref expr) => visitor.visit_expr(expr.clone()),
+        Expr::Unary(_, ref expr) => expr.visit(visitor),
         Expr::Binary(_, ref a, ref b) => {
-            visitor.visit_expr(a.clone());
-            visitor.visit_expr(b.clone());
+            a.visit(visitor);
+            b.visit(visitor);
         }
         Expr::Conditional(ref a, ref b, ref c) => {
-            visitor.visit_expr(a.clone());
-            visitor.visit_expr(b.clone());
-            visitor.visit_expr(c.clone());
+            a.visit(visitor);
+            b.visit(visitor);
+            c.visit(visitor);
         }
         Expr::Is(ref expr, ref ty) | Expr::IsNot(ref expr, ref ty) | Expr::As(ref expr, ref ty) => {
-            visitor.visit_expr(expr.clone());
-            visitor.visit_type(ty.clone());
+            expr.visit(visitor);
+            ty.visit(visitor);
         }
         Expr::Suffix(ref expr, ref suffix) => {
-            visitor.visit_expr(expr.clone());
-            visitor.visit_suffix(suffix);
+            expr.visit(visitor);
+            suffix.visit(visitor);
         }
         Expr::Identifier(_) => {}
         Expr::New {
             ref ty, ref args, ..
         } => {
-            visitor.visit_type(ty.clone());
-            visitor.visit_args(args.clone());
+            ty.visit(visitor);
+            args.visit(visitor);
         }
         Expr::List {
             ref element_ty,
@@ -388,70 +482,70 @@ pub fn walk_expr<V: Visitor>(visitor: &mut V, expr: Node<Expr>) {
             ..
         } => {
             if let Some(ref element_type) = *element_ty {
-                visitor.visit_type(element_type.clone());
+                element_type.visit(visitor);
             }
             for expr in elements {
-                visitor.visit_expr(expr.clone());
+                expr.visit(visitor);
             }
         }
         Expr::Map {
             ref kv_ty, ref kv, ..
         } => {
             if let Some((ref k, ref v)) = *kv_ty {
-                visitor.visit_type(k.clone());
-                visitor.visit_type(v.clone());
+                k.visit(visitor);
+                v.visit(visitor);
             }
             for &(ref k, ref v) in kv {
-                visitor.visit_expr(k.clone());
-                visitor.visit_expr(v.clone());
+                k.visit(visitor);
+                v.visit(visitor);
             }
         }
         Expr::Number(_) => {}
         Expr::String(ref string_literals) => for sl in string_literals {
-            visitor.visit_string_literal(sl);
+            sl.visit(visitor);
         },
         Expr::Symbol(_) => {}
         Expr::Paren(ref expr) => {
-            visitor.visit_expr(expr.clone());
+            expr.visit(visitor);
         }
         Expr::Throw(ref expr) => {
-            visitor.visit_expr(expr.clone());
+            expr.visit(visitor);
         }
         Expr::Cascade(ref expr, ref cascade) => {
-            visitor.visit_expr(expr.clone());
+            expr.visit(visitor);
             for suffix in &cascade.suffixes {
-                visitor.visit_suffix(suffix);
+                suffix.visit(visitor);
             }
             if let Some((_, ref expr)) = cascade.assign {
-                visitor.visit_expr(expr.clone());
+                expr.visit(visitor);
             }
         }
         Expr::Closure(ref fn_sig, ref fn_body) => {
-            visitor.visit_fn_sig(fn_sig.clone());
-            visitor.visit_fn_body(fn_body.clone());
+            fn_sig.visit(visitor);
+            fn_body.visit(visitor);
         }
     }
 }
 
 pub fn walk_args<V: Visitor>(visitor: &mut V, args: &Args) {
     for arg in &args.unnamed {
-        visitor.visit_expr(arg.clone());
+        arg.visit(visitor);
     }
     for arg in &args.named {
-        visitor.visit_expr(arg.expr.clone());
+        arg.expr.visit(visitor);
     }
 }
 
 pub fn walk_suffix<V: Visitor>(visitor: &mut V, suffix: &Suffix) {
     match *suffix {
         Suffix::Index(ref expr) => {
-            visitor.visit_expr(expr.clone());
+            expr.visit(visitor);
         }
         Suffix::Call(ref types, ref args) => {
             for ty in types {
-                visitor.visit_type(ty.clone());
+                ty.visit(visitor);
             }
-            visitor.visit_args(args);
+            args.visit(visitor);
         }
         Suffix::Field(_) => {}
         Suffix::FieldIfNotNull(_) => {}
@@ -460,6 +554,6 @@ pub fn walk_suffix<V: Visitor>(visitor: &mut V, suffix: &Suffix) {
 
 pub fn walk_string_literal<V: Visitor>(visitor: &mut V, string_literal: &StringLiteral) {
     for &(ref expr, _) in &string_literal.interpolated {
-        visitor.visit_expr(expr.clone());
+        expr.visit(visitor);
     }
 }
