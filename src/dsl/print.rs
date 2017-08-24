@@ -69,6 +69,9 @@ impl Printer {
     }
 
     fn dsl_field_def(&mut self, field: &FieldDef) {
+        if field.mutable {
+            self.print_str("mut ");
+        }
         self.print_ident(field.name);
         if let Some(ref ty) = field.ty {
             self.print_str(": ");

@@ -19,6 +19,7 @@ pub struct Instance {
 }
 
 pub struct FieldDef {
+    pub mutable: bool,
     pub name: Symbol,
     pub ty: Option<Type>,
     pub default: Option<Expr>,
