@@ -3,21 +3,21 @@ use dart::ast;
 use syntax::symbol::Symbol;
 use node::Node;
 
-pub struct Codegen {}
+pub struct Lowerer {}
 
-impl Codegen {
+impl Lowerer {
     pub fn new() -> Self {
-        Codegen {}
+        Lowerer {}
     }
 
-    pub fn codegen_items(&mut self, items: &[Item]) -> Vec<Node<ast::Item>> {
+    pub fn lower_items(&mut self, items: &[Item]) -> Vec<Node<ast::Item>> {
         items
             .iter()
-            .flat_map(|item| self.codegen_item(item))
+            .flat_map(|item| self.lower_item(item))
             .collect()
     }
 
-    fn codegen_item(&mut self, item: &Item) -> Vec<Node<ast::Item>> {
+    fn lower_item(&mut self, item: &Item) -> Vec<Node<ast::Item>> {
         match *item {
             Item::ComponentDef {
                 mut name,
@@ -34,15 +34,14 @@ impl Codegen {
                     let state_name = format!("_{}State", name.as_str().trim_left_matches('_'));
 
                     let mut class_members = vec![];
-                    class_members.extend(self.codegen_constructor(
-                        fields.iter().filter(|f| !f.mutable),
-                    ));
+                    class_members
+                        .extend(self.lower_constructor(fields.iter().filter(|f| !f.mutable)));
 
                     class_members.extend(
                         fields
                             .iter()
                             .filter(|f| !f.mutable)
-                            .map(|field| self.codegen_field_def(field)),
+                            .map(|field| self.lower_field_def(field)),
                     );
 
                     let body = Some(ast::FnBody::Arrow(Node::new(ast::Expr::New {
@@ -94,20 +93,20 @@ impl Codegen {
                     )));
                     name = Symbol::intern(&state_name);
                 } else {
-                    class_members.extend(self.codegen_constructor(fields));
+                    class_members.extend(self.lower_constructor(fields));
                 }
 
                 class_members.extend(
                     fields
                         .iter()
                         .filter(|f| f.mutable)
-                        .map(|field| self.codegen_field_def(field)),
+                        .map(|field| self.lower_field_def(field)),
                 );
 
                 class_members.extend(dart_members.iter().cloned());
 
                 let body = Some(ast::FnBody::Block(Node::new(ast::Statement::Block(vec![
-                    Node::new(ast::Statement::Return(Some(self.codegen_instance(body)))),
+                    Node::new(ast::Statement::Return(Some(self.lower_instance(body)))),
                 ]))));
                 class_members.push(Node::new(ast::ClassMember::Method(
                     vec![ast::MetadataItem::simple("override")],
@@ -147,7 +146,7 @@ impl Codegen {
         }
     }
 
-    fn codegen_constructor<'a, I: IntoIterator<Item = &'a FieldDef>>(
+    fn lower_constructor<'a, I: IntoIterator<Item = &'a FieldDef>>(
         &mut self,
         fields: I,
     ) -> Option<Node<ast::ClassMember>> {
@@ -170,7 +169,7 @@ impl Codegen {
                     init: field
                         .default
                         .as_ref()
-                        .map(|default| self.codegen_expr(default)),
+                        .map(|default| self.lower_expr(default)),
                 }),
             });
         }
@@ -210,14 +209,14 @@ impl Codegen {
         }))
     }
 
-    fn codegen_field_def(&mut self, field: &FieldDef) -> Node<ast::ClassMember> {
+    fn lower_field_def(&mut self, field: &FieldDef) -> Node<ast::ClassMember> {
         let mut var_ty = Node::new(ast::Type::Infer);
         let mut var_expr = None;
         if let Some(ref ty) = field.ty {
-            var_ty = self.codegen_type(ty);
+            var_ty = self.lower_type(ty);
         }
         if let Some(ref expr) = field.default {
-            var_expr = Some(self.codegen_expr(expr));
+            var_expr = Some(self.lower_expr(expr));
         }
         Node::new(ast::ClassMember::Fields {
             metadata: vec![],
@@ -239,18 +238,18 @@ impl Codegen {
         })
     }
 
-    fn codegen_field(&mut self, field: &Field) -> ast::NamedArg {
+    fn lower_field(&mut self, field: &Field) -> ast::NamedArg {
         ast::NamedArg {
             name: field.name,
-            expr: self.codegen_expr(&field.value),
+            expr: self.lower_expr(&field.value),
         }
     }
 
-    fn codegen_expr(&mut self, expr: &Expr) -> Node<ast::Expr> {
+    fn lower_expr(&mut self, expr: &Expr) -> Node<ast::Expr> {
         match *expr {
-            Expr::Instance(ref instance) => self.codegen_instance(&instance),
+            Expr::Instance(ref instance) => self.lower_instance(&instance),
             Expr::Array(ref exprs) => {
-                let elements = exprs.iter().map(|expr| self.codegen_expr(expr)).collect();
+                let elements = exprs.iter().map(|expr| self.lower_expr(expr)).collect();
                 Node::new(ast::Expr::List {
                     const_: false,
                     element_ty: None,
@@ -262,22 +261,22 @@ impl Codegen {
 
     }
 
-    fn codegen_type(&mut self, ty: &Type) -> Node<ast::Type> {
+    fn lower_type(&mut self, ty: &Type) -> Node<ast::Type> {
         match *ty {
             Type::Dart(ref dart) => dart.clone(),
         }
     }
 
-    fn codegen_instance(&mut self, instance: &Instance) -> Node<ast::Expr> {
+    fn lower_instance(&mut self, instance: &Instance) -> Node<ast::Expr> {
         let unnamed = instance
             .unnamed
             .iter()
-            .map(|expr| self.codegen_expr(expr))
+            .map(|expr| self.lower_expr(expr))
             .collect();
         let named = instance
             .fields
             .iter()
-            .map(|field| self.codegen_field(field))
+            .map(|field| self.lower_field(field))
             .collect();
         Node::new(ast::Expr::New {
             const_: false,

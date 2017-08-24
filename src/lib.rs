@@ -16,7 +16,6 @@ pub mod node;
 
 pub mod dart {
     pub mod ast;
-    pub mod codegen;
     pub mod lex;
     pub mod parse;
     pub mod print;
@@ -26,6 +25,8 @@ pub mod dart {
 
 pub mod dsl {
     pub mod ast;
+    pub mod lift;
+    pub mod lower;
     pub mod parse;
     pub mod print;
 }

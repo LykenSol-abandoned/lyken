@@ -8,8 +8,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use lyken::dart::lex::Lexer;
 use lyken::dart::parse::{Error, ErrorKind, Parser};
-use lyken::dart::codegen::Codegen;
 use lyken::dart::print::Printer;
+use lyken::dsl::lower::Lowerer;
 
 fn main() {
     let path = PathBuf::from(env::args().nth(1).unwrap());
@@ -18,7 +18,7 @@ fn main() {
         Ok(tokens) => match Parser::new(tokens.iter().cloned()).dsl_items() {
             Ok(items) => {
                 let mut out = File::create(path.with_extension("dart")).unwrap();
-                let code = Codegen::new().codegen_items(&items);
+                let code = Lowerer::new().lower_items(&items);
                 let result = Printer::new().dart_items(&code);
                 for token in result {
                     write!(out, "{}", token).unwrap();
