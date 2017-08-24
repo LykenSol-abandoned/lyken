@@ -142,7 +142,7 @@ pub struct TypeParameter {
     pub extends: Option<Node<Type>>,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Qualified {
     pub prefix: Option<Symbol>,
     pub name: Symbol,
@@ -414,7 +414,7 @@ pub enum FnBody {
     Native(Option<StringLiteral>),
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum OptionalArgKind {
     Positional,
     Named,
@@ -459,7 +459,7 @@ pub struct VarType {
     pub ty: Node<Type>,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum FinalConstVar {
     Final,
     Const,
