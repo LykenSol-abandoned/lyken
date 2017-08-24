@@ -16,19 +16,14 @@ def FlutterView {
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  @override
-  _MyHomePageState createState() => new _MyHomePageState();
-}
+def MyHomePage {
+  mut _counter: int = 0,
 
-class _MyHomePageState extends State<MyHomePage> {
   static const String _channel = "increment";
   static const String _pong = "pong";
   static const String _emptyMessage = "";
   static const BasicMessageChannel<String> platform =
       const BasicMessageChannel<String>(_channel, const StringCodec());
-
-  int _counter = 0;
 
   @override
   void initState() {
@@ -47,34 +42,37 @@ class _MyHomePageState extends State<MyHomePage> {
     platform.send(_pong);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return new Scaffold(
-      body: new Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          new Expanded(
-            child: new Center(
-              child: new Text(
-                'Platform button tapped $_counter time${ _counter == 1 ? '' : 's' }.',
-                style: const TextStyle(fontSize: 17.0))
-            ),
-          ),
-          new Container(
-            padding: const EdgeInsets.only(bottom: 15.0, left: 5.0),
-            child: new Row(
-              children: <Widget>[
-                new Image.asset('assets/flutter-mark-square-64.png', scale: 1.5),
-                const Text('Flutter', style: const TextStyle(fontSize: 30.0)),
-              ],
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: new FloatingActionButton(
-        onPressed: _sendFlutterIncrement,
-        child: const Icon(Icons.add),
-      ),
-    );
+  Scaffold {
+    body: Column {
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded {
+          child: Center {
+            child: Text('Platform button tapped $_counter time${ _counter == 1 ? '' : 's' }.') {
+              style: TextStyle {
+                fontSize: 17.0
+              }
+            }
+          },
+        },
+        Container {
+          padding: const EdgeInsets.only(bottom: 15.0, left: 5.0),
+          child: Row {
+            children: [
+              new Image.asset('assets/flutter-mark-square-64.png', scale: 1.5),
+              Text('Flutter') {
+                style: TextStyle {
+                  fontSize: 30.0
+                }
+              },
+            ],
+          },
+        },
+      ],
+    },
+    floatingActionButton: FloatingActionButton {
+      onPressed: _sendFlutterIncrement,
+      child: Icon(Icons.add),
+    },
   }
 }

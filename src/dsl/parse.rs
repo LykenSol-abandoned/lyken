@@ -54,9 +54,11 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
     }
 
     fn dsl_field_def(&mut self) -> ParseResult<FieldDef> {
+        let mutable = self.eat_keyword("mut");
         let name = self.parse_ident()?;
         let mut fd = FieldDef {
-            name: name,
+            mutable,
+            name,
             ty: None,
             default: None,
         };
