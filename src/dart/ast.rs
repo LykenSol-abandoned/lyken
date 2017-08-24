@@ -49,7 +49,7 @@ pub enum Item {
         generics: Vec<TypeParameter>,
         ty: Node<Type>,
     },
-    Function(Function),
+    Function(Node<Function>),
     Vars(VarType, Vec<Node<VarDef>>),
 }
 
@@ -92,7 +92,7 @@ pub enum ClassMember {
         initializers: Vec<ConstructorInitializer>,
         function_body: Option<FnBody>,
     },
-    Method(Metadata, Vec<MethodQualifiers>, Function),
+    Method(Metadata, Vec<MethodQualifiers>, Node<Function>),
     Fields {
         metadata: Metadata,
         static_: bool,
@@ -503,7 +503,7 @@ pub struct TryPart {
 pub enum Statement {
     Block(Vec<Node<Statement>>),
     Vars(VarType, Vec<Node<VarDef>>),
-    Function(Function),
+    Function(Node<Function>),
     For(bool, ForLoop, Node<Statement>),
     While(Node<Expr>, Node<Statement>),
     DoWhile(Node<Statement>, Node<Expr>),

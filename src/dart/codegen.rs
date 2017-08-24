@@ -94,7 +94,7 @@ impl Codegen {
                 class_members.push(Node::new(ast::ClassMember::Method(
                     vec![ast::MetadataItem::simple("override")],
                     vec![],
-                    ast::Function {
+                    Node::new(ast::Function {
                         name: ast::FnName::Regular(Symbol::intern("build")),
                         generics: vec![],
                         sig: ast::FnSig {
@@ -111,7 +111,7 @@ impl Codegen {
                             generator: false,
                         },
                         body,
-                    },
+                    }),
                 )));
                 Node::new(ast::Item::Class {
                     metadata: vec![],
