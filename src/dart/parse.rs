@@ -1376,7 +1376,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         Ok(FnName::Regular(self.parse_ident()?))
     }
 
-    fn dart_function(&mut self, requires_body: bool) -> ParseResult<Function> {
+    fn dart_function(&mut self, requires_body: bool) -> ParseResult<Node<Function>> {
         let (return_type, name) = self.try(|p| Ok((p.dart_type()?, p.dart_fn_name()?)))
             .ok_or(())
             .or_else(
@@ -1402,7 +1402,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
                 self.dart_fn_args(return_type)?
             }
         };
-        Ok(Function {
+        Ok(Node::new(Function {
             name,
             generics,
             sig,
@@ -1411,7 +1411,7 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
             } else {
                 Some(self.dart_fn_body(true)?)
             },
-        })
+        }))
     }
 
     pub fn dart_class_member(&mut self, class_name: Symbol) -> ParseResult<Node<ClassMember>> {

@@ -3,10 +3,10 @@ use dart::ast::{Args, ClassMember, ConstructorInitializer, Expr, FnBody, FnSig, 
 use node::Node;
 
 pub trait Visitor: Sized {
-    fn visit_item(&mut self, item: &Item) {
+    fn visit_item(&mut self, item: Node<Item>) {
         walk_item(self, item)
     }
-    fn visit_class_member(&mut self, class_member: &ClassMember) {
+    fn visit_class_member(&mut self, class_member: Node<ClassMember>) {
         walk_class_member(self, class_member)
     }
     fn visit_constructor_initializer(&mut self, initializer: &ConstructorInitializer) {
@@ -21,7 +21,7 @@ pub trait Visitor: Sized {
     fn visit_type(&mut self, ty: Node<Type>) {
         walk_type(self, ty)
     }
-    fn visit_function(&mut self, function: &Function) {
+    fn visit_function(&mut self, function: Node<Function>) {
         walk_function(self, function)
     }
     fn visit_fn_sig(&mut self, sig: &FnSig) {
@@ -32,6 +32,9 @@ pub trait Visitor: Sized {
     }
     fn visit_statement(&mut self, statement: Node<Statement>) {
         walk_statement(self, statement)
+    }
+    fn visit_block(&mut self, statements: &[Node<Statement>]) {
+        walk_block(self, statements)
     }
     fn visit_var_def(&mut self, var: Node<VarDef>) {
         walk_var_def(self, var)
@@ -54,15 +57,15 @@ pub trait Visit {
     fn visit<V: Visitor>(&self, visitor: &mut V);
 }
 
-impl Visit for Item {
+impl Visit for Node<Item> {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
-        visitor.visit_item(self);
+        visitor.visit_item(self.clone());
     }
 }
 
-impl Visit for ClassMember {
+impl Visit for Node<ClassMember> {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
-        visitor.visit_class_member(self);
+        visitor.visit_class_member(self.clone());
     }
 }
 
@@ -90,9 +93,9 @@ impl Visit for Node<Type> {
     }
 }
 
-impl Visit for Function {
+impl Visit for Node<Function> {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
-        visitor.visit_function(self);
+        visitor.visit_function(self.clone());
     }
 }
 
@@ -111,6 +114,12 @@ impl Visit for FnBody {
 impl Visit for Node<Statement> {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.visit_statement(self.clone());
+    }
+}
+
+impl Visit for [Node<Statement>] {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_block(self);
     }
 }
 
@@ -144,7 +153,7 @@ impl Visit for StringLiteral {
     }
 }
 
-pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
+pub fn walk_item<V: Visitor>(visitor: &mut V, item: Node<Item>) {
     match *item {
         Item::LibraryName { ref metadata, .. } |
         Item::PartOf { ref metadata, .. } |
@@ -228,7 +237,7 @@ pub fn walk_item<V: Visitor>(visitor: &mut V, item: &Item) {
     }
 }
 
-pub fn walk_class_member<V: Visitor>(visitor: &mut V, class_member: &ClassMember) {
+pub fn walk_class_member<V: Visitor>(visitor: &mut V, class_member: Node<ClassMember>) {
     match *class_member {
         ClassMember::Redirect {
             ref metadata,
@@ -319,7 +328,7 @@ pub fn walk_type<V: Visitor>(visitor: &mut V, ty: Node<Type>) {
     }
 }
 
-pub fn walk_function<V: Visitor>(visitor: &mut V, function: &Function) {
+pub fn walk_function<V: Visitor>(visitor: &mut V, function: Node<Function>) {
     function.generics.visit(visitor);
     function.sig.visit(visitor);
     if let Some(ref body) = function.body {
@@ -355,9 +364,9 @@ pub fn walk_fn_body<V: Visitor>(visitor: &mut V, fn_body: &FnBody) {
 
 pub fn walk_statement<V: Visitor>(visitor: &mut V, statement: Node<Statement>) {
     match *statement {
-        Statement::Block(ref statements) => for statement in statements {
-            statement.visit(visitor);
-        },
+        Statement::Block(ref statements) => {
+            statements.visit(visitor);
+        }
         Statement::Vars(ref var_type, ref vars) => {
             var_type.ty.visit(visitor);
             for var in vars {
@@ -441,6 +450,12 @@ pub fn walk_statement<V: Visitor>(visitor: &mut V, statement: Node<Statement>) {
         Statement::Labelled(_, ref statement) => {
             statement.visit(visitor);
         }
+    }
+}
+
+pub fn walk_block<V: Visitor>(visitor: &mut V, statements: &[Node<Statement>]) {
+    for statement in statements {
+        statement.visit(visitor);
     }
 }
 

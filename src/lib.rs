@@ -20,6 +20,7 @@ pub mod dart {
     pub mod lex;
     pub mod parse;
     pub mod print;
+    pub mod resolve;
     pub mod visit;
 }
 
