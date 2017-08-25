@@ -1,14 +1,18 @@
 #![allow(unused_doc_comment)]
 
 use dart::ast::*;
-use dart::lex::Token;
+use dart::lex::{self, Lexer, Token};
 use syntax::symbol::Symbol;
 use syntax::codemap::Span;
 use node::Node;
+use std::{iter, slice};
+use std::path::Path;
+
+type Tokens<'a> = iter::Cloned<slice::Iter<'a, (Span, Token)>>;
 
 #[derive(Clone)]
-pub struct Parser<I> {
-    tokens: I,
+pub struct Parser<'a> {
+    tokens: Tokens<'a>,
     cur: Option<Token>,
     cur_span: Span,
     skip_blocks: bool,
@@ -19,10 +23,16 @@ error_chain! {
         Error, ErrorKind, ParseResultExt, ParseResult;
     }
 
+    links {
+        Lex(lex::Error, lex::ErrorKind);
+    }
+
     errors {
         ExpectedAt {
             expected: Expected,
             span: Span,
+        } {
+            display("{:?}: expected {:?}", span, expected)
         }
     }
 }
@@ -49,8 +59,8 @@ macro_rules! expected {
     }
 }
 
-impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
-    pub fn new(tokens: I) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(tokens: Tokens<'a>) -> Self {
         let mut parser = Parser {
             tokens,
             cur: None,
@@ -59,6 +69,13 @@ impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
         };
         parser.bump();
         parser
+    }
+
+    pub fn with_file<F: FnOnce(Parser) -> ParseResult<R>, R>(path: &Path, f: F) -> ParseResult<R> {
+        let file = ::codemap().load_file(path).unwrap();
+        let tokens = Lexer::new(::mk_sp(file.start_pos, file.end_pos))
+            .tokenize()?;
+        f(Parser::new(tokens.iter().cloned()))
     }
 
     pub fn skip_blocks(mut self) -> Self {

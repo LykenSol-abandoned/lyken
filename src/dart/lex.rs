@@ -1,3 +1,5 @@
+#![allow(unused_doc_comment)]
+
 use unicode_xid::UnicodeXID;
 use std::str;
 use syntax::symbol::Symbol;
@@ -78,18 +80,27 @@ impl Token {
     }
 }
 
+error_chain! {
+    types {
+        Error, ErrorKind, LexResultExt, LexResult;
+    }
+
+    errors {
+        At {
+            msg: ErrorMsg,
+            span: Span,
+        } {
+            display("{:?}: {:?}", msg, span)
+        }
+    }
+}
+
 #[derive(Debug)]
-pub enum Error {
+pub enum ErrorMsg {
     UnterminatedShebang,
     UnterminatedStringLiteral,
     UnterminatedBlockComment,
     UnhandledCharacter(char),
-}
-
-#[derive(Debug)]
-pub struct ErrorLocation {
-    pub err: Error,
-    pub span: Span,
 }
 
 pub struct Lexer {
@@ -144,7 +155,7 @@ impl Lexer {
         self.next_pos = self.pos + Pos::from_usize(self.c.len_utf8());
     }
 
-    pub fn tokenize(mut self) -> Result<Vec<(Span, Token)>, ErrorLocation> {
+    pub fn tokenize(mut self) -> LexResult<Vec<(Span, Token)>> {
         struct InterpolationLevel {
             quote: char,
             triple: bool,
@@ -156,7 +167,9 @@ impl Lexer {
             (or $otherwise:stmt) => {
                 span.hi = self.next_pos;
                 if self.next_pos >= self.end {
-                    $otherwise;
+                    if true {
+                        $otherwise;
+                    }
                     return Ok(self.tokens);
                 }
                 self.bump();
@@ -169,16 +182,16 @@ impl Lexer {
             ($t:expr) => (self.tokens.push((span, $t)))
         }
         macro_rules! emit {
-            ($e:expr) => (Err(ErrorLocation { err: $e, span })?)
+            ($e:expr) => (bail!(ErrorKind::At { msg: $e, span }))
         }
         bump!();
 
         if self.c == '#' {
-            bump!(or emit!(Error::UnterminatedShebang));
+            bump!(or emit!(ErrorMsg::UnterminatedShebang));
             if self.c != '!' {
-                emit!(Error::UnterminatedShebang);
+                emit!(ErrorMsg::UnterminatedShebang);
             }
-            bump!(or emit!(Error::UnterminatedShebang));
+            bump!(or emit!(ErrorMsg::UnterminatedShebang));
             while self.c != '\n' {
                 bump!(or put!(Token::WhiteSpace(span)));
             }
@@ -231,10 +244,10 @@ impl Lexer {
                     put!(Token::WhiteSpace(span));
                 } else if self.c == '*' {
                     let mut depth = 0;
-                    bump!(or emit!(Error::UnterminatedBlockComment));
+                    bump!(or emit!(ErrorMsg::UnterminatedBlockComment));
                     loop {
                         if self.c == '*' {
-                            bump!(or emit!(Error::UnterminatedBlockComment));
+                            bump!(or emit!(ErrorMsg::UnterminatedBlockComment));
                             if self.c == '/' {
                                 if depth == 0 {
                                     break;
@@ -244,7 +257,7 @@ impl Lexer {
                                 continue;
                             }
                         } else if self.c == '/' {
-                            bump!(or emit!(Error::UnterminatedBlockComment));
+                            bump!(or emit!(ErrorMsg::UnterminatedBlockComment));
                             if self.c == '*' {
                                 depth += 1;
                             } else {
@@ -252,7 +265,7 @@ impl Lexer {
                             }
                         }
 
-                        bump!(or emit!(Error::UnterminatedBlockComment));
+                        bump!(or emit!(ErrorMsg::UnterminatedBlockComment));
                     }
                     bump!(or put!(Token::WhiteSpace(span)));
                     put!(Token::WhiteSpace(span));
@@ -297,7 +310,7 @@ impl Lexer {
                     quote = original.quote;
                     triple = original.triple;
                 }
-                bump!(or emit!(Error::UnterminatedStringLiteral));
+                bump!(or emit!(ErrorMsg::UnterminatedStringLiteral));
                 let mut contents = ::mk_sp(self.pos, self.pos);
                 loop {
                     contents.hi = self.pos;
@@ -305,19 +318,19 @@ impl Lexer {
                         if !triple {
                             break;
                         }
-                        bump!(or emit!(Error::UnterminatedStringLiteral));
+                        bump!(or emit!(ErrorMsg::UnterminatedStringLiteral));
                         if self.c == quote {
-                            bump!(or emit!(Error::UnterminatedStringLiteral));
+                            bump!(or emit!(ErrorMsg::UnterminatedStringLiteral));
                             if self.c == quote {
                                 break;
                             }
                         }
                     }
                     if self.c == '\n' && !triple {
-                        emit!(Error::UnterminatedStringLiteral)
+                        emit!(ErrorMsg::UnterminatedStringLiteral)
                     }
                     if self.c == '$' && !raw {
-                        bump!(or emit!(Error::UnterminatedStringLiteral));
+                        bump!(or emit!(ErrorMsg::UnterminatedStringLiteral));
                         if self.c == '{' {
                             interpolation_levels.push(InterpolationLevel {
                                 quote,
@@ -330,9 +343,9 @@ impl Lexer {
                         continue;
                     }
                     if self.c == '\\' && !raw {
-                        bump!(or emit!(Error::UnterminatedStringLiteral));
+                        bump!(or emit!(ErrorMsg::UnterminatedStringLiteral));
                     }
-                    bump!(or emit!(Error::UnterminatedStringLiteral));
+                    bump!(or emit!(ErrorMsg::UnterminatedStringLiteral));
                 }
                 let token = Token::StringLiteral {
                     contents,
@@ -345,7 +358,7 @@ impl Lexer {
                 bump!(or put!(token));
                 put!(token);
             } else {
-                emit!(Error::UnhandledCharacter(self.c))
+                emit!(ErrorMsg::UnhandledCharacter(self.c))
             }
         }
     }

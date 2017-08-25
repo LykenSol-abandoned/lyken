@@ -1,11 +1,9 @@
 #![allow(unused_doc_comment)]
 
 use dsl::ast::*;
-use dart::lex::Token;
-use syntax::codemap::Span;
 use dart::parse::{ParseResult, Parser};
 
-impl<I: Clone + Iterator<Item = (Span, Token)>> Parser<I> {
+impl<'a> Parser<'a> {
     fn dsl_type(&mut self) -> ParseResult<Type> {
         Ok(Type::Dart(self.dart_type()?))
     }

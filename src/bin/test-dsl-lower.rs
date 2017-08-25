@@ -13,31 +13,17 @@ use lyken::dsl::lower::Lowerer;
 
 fn main() {
     let path = PathBuf::from(env::args().nth(1).unwrap());
-    let file = lyken::codemap().load_file(&path).unwrap();
-    match Lexer::new(lyken::mk_sp(file.start_pos, file.end_pos)).tokenize() {
-        Ok(tokens) => match Parser::new(tokens.iter().cloned()).dsl_items() {
-            Ok(items) => {
-                let mut out = File::create(path.with_extension("dart")).unwrap();
-                let code = Lowerer::new().lower_items(&items);
-                let result = Printer::new().dart_items(&code);
-                for token in result {
-                    write!(out, "{}", token).unwrap();
-                }
+    match Parser::with_file(&path, |mut p| p.dsl_items()) {
+        Ok(items) => {
+            let mut out = File::create(path.with_extension("dart")).unwrap();
+            let code = Lowerer::new().lower_items(&items);
+            let result = Printer::new().dart_items(&code);
+            for token in result {
+                write!(out, "{}", token).unwrap();
             }
-            Err(Error(ErrorKind::ExpectedAt { expected, span }, state)) => {
-                println!("{:?}: expected {:?}", span, expected);
-                if let Some(ref backtrace) = state.backtrace {
-                    println!("{:?}", backtrace);
-                }
-                std::process::exit(1);
-            }
-            Err(error) => {
-                println!("{}: {:?}", path.display(), error);
-                std::process::exit(1);
-            }
-        },
+        }
         Err(error) => {
-            println!("{:?}: {:?}", error.span, error.err);
+            println!("{}", error);
             std::process::exit(1);
         }
     }
