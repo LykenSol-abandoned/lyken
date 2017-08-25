@@ -104,7 +104,7 @@ impl Lifter {
                                     continue;
                                 }
                             }
-                            if meta.len() > 1 || meta.is_empty() {
+                            if meta.len() != 1 {
                                 return ast::Item::Dart(item);
                             }
                             if meta[0].suffix.is_some() {
@@ -119,7 +119,6 @@ impl Lifter {
                             if !qualif.is_empty() {
                                 return ast::Item::Dart(item);
                             }
-
                             if !function.generics.is_empty() {
                                 return ast::Item::Dart(item);
                             }
@@ -127,7 +126,7 @@ impl Lifter {
                                 match *body {
                                     FnBody::Block(ref stm) => match **stm {
                                         Statement::Block(ref stm) => {
-                                            if stm.len() > 1 || stm.is_empty() {
+                                            if stm.len() != 1 {
                                                 return ast::Item::Dart(item);
                                             }
                                             match *stm[0] {
@@ -183,7 +182,7 @@ impl Lifter {
                                     if !args.unnamed.is_empty() {
                                         return ast::Item::Dart(item);
                                     }
-                                    if !args.named.is_empty() || args.named.len() > 1 {
+                                    if args.named.len() != 1 {
                                         return ast::Item::Dart(item);
                                     }
                                     if args.named[0].name != "key" {
@@ -196,22 +195,23 @@ impl Lifter {
                                         _ => return ast::Item::Dart(item),
                                     }
                                 }
-                                _ => return ast::Item::Dart(item),
+                                _ => {
+                                    return ast::Item::Dart(item);
+                                }
                             }
                             if !sig.required.is_empty() {
                                 return ast::Item::Dart(item);
                             }
-
                             if sig.optional.len() != fields.len() + 1 {
                                 return ast::Item::Dart(item);
                             }
                             if !sig.optional[0].metadata.is_empty() {
                                 return ast::Item::Dart(item);
                             }
-                            if !sig.optional[0].covariant {
+                            if sig.optional[0].covariant {
                                 return ast::Item::Dart(item);
                             }
-                            if !sig.optional[0].field {
+                            if sig.optional[0].field {
                                 return ast::Item::Dart(item);
                             }
                             if sig.optional[0].var.name != "key" {
@@ -251,7 +251,6 @@ impl Lifter {
                                     }
                                 }
                             }
-
                         }
                         ClassMember::Fields { .. } => {}
                         _ => dart_members.push(member.clone()),
@@ -263,7 +262,9 @@ impl Lifter {
                     dart_members,
                     body: match instance {
                         Some(instance) => instance,
-                        None => return ast::Item::Dart(item),
+                        None => {
+                            return ast::Item::Dart(item);
+                        }
                     },
                 };
             }

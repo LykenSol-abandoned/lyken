@@ -656,6 +656,8 @@ impl Printer {
         self.dart_fn_args(&func.sig);
         if let Some(ref body) = func.body {
             self.dart_function_body(body);
+        } else {
+            self.print_str(";");
         }
     }
 
@@ -1037,6 +1039,8 @@ impl Printer {
                 self.print_str(" ");
                 if let Some(ref body) = *function_body {
                     self.dart_function_body(body);
+                } else {
+                    self.print_str(";");
                 }
             }
             ClassMember::Method(ref metadata, ref qualifiers, ref func) => {
@@ -1091,7 +1095,6 @@ impl Printer {
                     self.print_ident(name);
                 }
                 self.dart_arguments(arguments);
-                self.print_str(";");
             }
             ConstructorInitializer::This(name, ref arguments) => {
                 self.print_str("this");

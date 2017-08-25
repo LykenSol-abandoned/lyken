@@ -11,6 +11,10 @@ test = false
 doctest = false
 
 [[bin]]
+name = "reformat-dsl"
+test = false
+
+[[bin]]
 name = "test-dart-lex"
 test = false
 
@@ -19,7 +23,11 @@ name = "test-dart-parse"
 test = false
 
 [[bin]]
-name = "test-dsl"
+name = "test-dsl-lift"
+test = false
+
+[[bin]]
+name = "test-dsl-lower"
 test = false
 
 [dependencies]

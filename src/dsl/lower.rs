@@ -33,6 +33,13 @@ impl Lowerer {
 
                     let state_name = format!("_{}State", name.as_str().trim_left_matches('_'));
 
+
+                    class_members.extend(
+                        fields
+                            .iter()
+                            .filter(|f| f.mutable)
+                            .map(|field| self.lower_field_def(field)),
+                    );
                     let mut class_members = vec![];
                     class_members
                         .extend(self.lower_constructor(fields.iter().filter(|f| !f.mutable)));
@@ -94,14 +101,9 @@ impl Lowerer {
                     name = Symbol::intern(&state_name);
                 } else {
                     class_members.extend(self.lower_constructor(fields));
-                }
 
-                class_members.extend(
-                    fields
-                        .iter()
-                        .filter(|f| f.mutable)
-                        .map(|field| self.lower_field_def(field)),
-                );
+                    class_members.extend(fields.iter().map(|field| self.lower_field_def(field)));
+                }
 
                 class_members.extend(dart_members.iter().cloned());
 

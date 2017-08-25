@@ -14,7 +14,7 @@ fn all_dsl() {
     for entry in WalkDir::new("tests") {
         let entry = entry.unwrap();
         if entry.path().extension().map_or(false, |x| x == "lyk") {
-            let status = Command::new("target/debug/test-dsl")
+            let status = Command::new("target/debug/test-dsl-lower")
                 .arg(entry.path())
                 .status()
                 .unwrap();
