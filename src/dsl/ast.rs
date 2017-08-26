@@ -7,15 +7,9 @@ pub enum Item {
         name: Symbol,
         fields: Vec<FieldDef>,
         dart_members: Vec<Node<dart::ast::ClassMember>>,
-        body: Instance,
+        body: Option<Expr>,
     },
     Dart(Node<dart::ast::Item>),
-}
-
-pub struct Instance {
-    pub name: Symbol,
-    pub unnamed: Vec<Expr>,
-    pub fields: Vec<Field>,
 }
 
 pub struct FieldDef {
@@ -35,7 +29,11 @@ pub enum Type {
 }
 
 pub enum Expr {
-    Instance(Instance),
+    Instance {
+        name: Symbol,
+        unnamed: Vec<Expr>,
+        fields: Vec<Field>,
+    },
     Array(Vec<Expr>),
     Dart(Node<dart::ast::Expr>),
 }

@@ -51,15 +51,6 @@ impl Lowerer {
                             .map(|field| self.lower_field_def(field)),
                     );
 
-                    let body = Some(ast::FnBody::Arrow(Node::new(ast::Expr::New {
-                        const_: false,
-                        ty: ast::Type::simple_path(&state_name),
-                        ctor: None,
-                        args: ast::Args {
-                            unnamed: vec![],
-                            named: vec![],
-                        },
-                    })));
                     class_members.push(Node::new(ast::ClassMember::Method(
                         vec![ast::MetadataItem::simple("override")],
                         vec![],
@@ -74,7 +65,15 @@ impl Lowerer {
                                 async: false,
                                 generator: false,
                             },
-                            body,
+                            body: Some(ast::FnBody::Arrow(Node::new(ast::Expr::New {
+                                const_: false,
+                                ty: ast::Type::simple_path(&state_name),
+                                ctor: None,
+                                args: ast::Args {
+                                    unnamed: vec![],
+                                    named: vec![],
+                                },
+                            }))),
                         }),
                     )));
 
@@ -107,31 +106,33 @@ impl Lowerer {
 
                 class_members.extend(dart_members.iter().cloned());
 
-                let body = Some(ast::FnBody::Block(Node::new(ast::Statement::Block(vec![
-                    Node::new(ast::Statement::Return(Some(self.lower_instance(body)))),
-                ]))));
-                class_members.push(Node::new(ast::ClassMember::Method(
-                    vec![ast::MetadataItem::simple("override")],
-                    vec![],
-                    Node::new(ast::Function {
-                        name: ast::FnName::Regular(Symbol::intern("build")),
-                        generics: vec![],
-                        sig: ast::FnSig {
-                            return_type: ast::Type::simple_path("Widget"),
-                            required: vec![
-                                ast::ArgDef::simple(
-                                    ast::Type::simple_path("BuildContext"),
-                                    "context",
-                                ),
-                            ],
-                            optional: vec![],
-                            optional_kind: ast::OptionalArgKind::Named,
-                            async: false,
-                            generator: false,
-                        },
-                        body,
-                    }),
-                )));
+                if let Some(ref body) = *body {
+                    class_members.push(Node::new(ast::ClassMember::Method(
+                        vec![ast::MetadataItem::simple("override")],
+                        vec![],
+                        Node::new(ast::Function {
+                            name: ast::FnName::Regular(Symbol::intern("build")),
+                            generics: vec![],
+                            sig: ast::FnSig {
+                                return_type: ast::Type::simple_path("Widget"),
+                                required: vec![
+                                    ast::ArgDef::simple(
+                                        ast::Type::simple_path("BuildContext"),
+                                        "context",
+                                    ),
+                                ],
+                                optional: vec![],
+                                optional_kind: ast::OptionalArgKind::Named,
+                                async: false,
+                                generator: false,
+                            },
+                            body: Some(ast::FnBody::Block(Node::new(ast::Statement::Block(vec![
+                                Node::new(ast::Statement::Return(Some(self.lower_expr(body)))),
+                            ])))),
+                        }),
+                    )));
+                }
+
                 items.push(Node::new(ast::Item::Class {
                     metadata: vec![],
                     abstract_: false,
@@ -249,7 +250,23 @@ impl Lowerer {
 
     fn lower_expr(&mut self, expr: &Expr) -> Node<ast::Expr> {
         match *expr {
-            Expr::Instance(ref instance) => self.lower_instance(&instance),
+            Expr::Instance {
+                name,
+                ref unnamed,
+                ref fields,
+            } => {
+                let unnamed = unnamed.iter().map(|expr| self.lower_expr(expr)).collect();
+                let named = fields.iter().map(|field| self.lower_field(field)).collect();
+                Node::new(ast::Expr::New {
+                    const_: false,
+                    ty: Node::new(ast::Type::Path(
+                        ast::Qualified { prefix: None, name },
+                        vec![],
+                    )),
+                    ctor: None,
+                    args: ast::Args { unnamed, named },
+                })
+            }
             Expr::Array(ref exprs) => {
                 let elements = exprs.iter().map(|expr| self.lower_expr(expr)).collect();
                 Node::new(ast::Expr::List {
@@ -267,30 +284,5 @@ impl Lowerer {
         match *ty {
             Type::Dart(ref dart) => dart.clone(),
         }
-    }
-
-    fn lower_instance(&mut self, instance: &Instance) -> Node<ast::Expr> {
-        let unnamed = instance
-            .unnamed
-            .iter()
-            .map(|expr| self.lower_expr(expr))
-            .collect();
-        let named = instance
-            .fields
-            .iter()
-            .map(|field| self.lower_field(field))
-            .collect();
-        Node::new(ast::Expr::New {
-            const_: false,
-            ty: Node::new(ast::Type::Path(
-                ast::Qualified {
-                    prefix: None,
-                    name: instance.name,
-                },
-                vec![],
-            )),
-            ctor: None,
-            args: ast::Args { unnamed, named },
-        })
     }
 }

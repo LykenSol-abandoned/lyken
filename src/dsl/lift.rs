@@ -53,7 +53,7 @@ impl Lifter {
                 }
                 let mut fields = vec![];
                 let mut dart_members = vec![];
-                let mut instance = None;
+                let mut build_return = None;
                 for member in members {
                     match *member.clone() {
                         ClassMember::Fields {
@@ -131,12 +131,8 @@ impl Lifter {
                                             }
                                             match *stm[0] {
                                                 Statement::Return(Some(ref expr)) => {
-                                                    match self.lift_expr(expr.clone()) {
-                                                        ast::Expr::Instance(inst) => {
-                                                            instance = Some(inst);
-                                                        }
-                                                        _ => return ast::Item::Dart(item),
-                                                    }
+                                                    build_return =
+                                                        Some(self.lift_expr(expr.clone()));
                                                 }
                                                 _ => return ast::Item::Dart(item),
                                             }
@@ -260,12 +256,7 @@ impl Lifter {
                     name,
                     fields,
                     dart_members,
-                    body: match instance {
-                        Some(instance) => instance,
-                        None => {
-                            return ast::Item::Dart(item);
-                        }
-                    },
+                    body: build_return,
                 };
             }
             _ => ast::Item::Dart(item),
@@ -274,8 +265,8 @@ impl Lifter {
     fn lift_expr(&mut self, expr: Node<Expr>) -> ast::Expr {
         match *expr.clone() {
             Expr::List {
-                const_: false,
-                element_ty: None,
+                const_: _,
+                element_ty: _,
                 ref elements,
             } => {
                 let mut exprs = vec![];
@@ -285,7 +276,7 @@ impl Lifter {
                 ast::Expr::Array(exprs)
             }
             Expr::New {
-                const_: false,
+                const_: _,
                 ref ty,
                 ctor: None,
                 ref args,
@@ -307,11 +298,11 @@ impl Lifter {
                         for arg in &args.named {
                             fields.push(self.lift_field(arg));
                         }
-                        return ast::Expr::Instance(ast::Instance {
+                        return ast::Expr::Instance {
                             name: name.name,
                             unnamed,
                             fields,
-                        });
+                        };
                     }
                 }
                 _ => return ast::Expr::Dart(expr),

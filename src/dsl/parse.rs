@@ -12,7 +12,29 @@ impl<'a> Parser<'a> {
         if self.probe(|p| {
             p.parse_ident().is_ok() && (p.eat_punctuation('(') || p.eat_punctuation('{'))
         }) {
-            return Ok(Expr::Instance(self.dsl_instance()?));
+            let name = self.parse_ident()?;
+            let (unnamed, fields) = if self.eat_punctuation('(') {
+                let unnamed = self.parse_one_or_more(',', |p| p.dsl_expr())?;
+                self.expect_punctuation(')')?;
+                let fields = if self.eat_punctuation('{') {
+                    let fields = self.dsl_fields()?;
+                    self.expect_punctuation('}')?;
+                    fields
+                } else {
+                    vec![]
+                };
+                (unnamed, fields)
+            } else {
+                self.expect_punctuation('{')?;
+                let fields = self.dsl_fields()?;
+                self.expect_punctuation('}')?;
+                (vec![], fields)
+            };
+            return Ok(Expr::Instance {
+                name,
+                unnamed,
+                fields,
+            });
         }
         if self.eat_punctuation('[') {
             let mut exprs = vec![];
@@ -81,33 +103,6 @@ impl<'a> Parser<'a> {
         Ok(fields)
     }
 
-    fn dsl_instance(&mut self) -> ParseResult<Instance> {
-        let name = self.parse_ident()?;
-        let (unnamed, fields) = if self.eat_punctuation('(') {
-            let unnamed = self.parse_one_or_more(',', |p| p.dsl_expr())?;
-            self.expect_punctuation(')')?;
-            let fields = if self.eat_punctuation('{') {
-                let fields = self.dsl_fields()?;
-                self.expect_punctuation('}')?;
-                fields
-            } else {
-                vec![]
-            };
-            (unnamed, fields)
-        } else {
-            self.expect_punctuation('{')?;
-            let fields = self.dsl_fields()?;
-            self.expect_punctuation('}')?;
-            (vec![], fields)
-        };
-        Ok(Instance {
-            name,
-            unnamed,
-            fields,
-        })
-    }
-
-
     fn dsl_item(&mut self) -> ParseResult<Item> {
         if self.eat_keyword("def") {
             let name = self.parse_ident()?;
@@ -117,7 +112,12 @@ impl<'a> Parser<'a> {
             while let Some(dart_member) = self.try(|p| p.dart_class_member(name)) {
                 dart_members.push(dart_member);
             }
-            let body = self.dsl_instance()?;
+            let body = if self.eat_punctuation2('.', '.') {
+                Some(self.dsl_expr()?)
+            } else {
+                None
+            };
+
             self.expect_punctuation('}')?;
             return Ok(Item::ComponentDef {
                 name,
