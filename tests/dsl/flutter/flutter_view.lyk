@@ -7,7 +7,7 @@ void main() {
 }
 
 def FlutterView {
-  MaterialApp {
+  ..MaterialApp {
     title: 'Flutter View',
     theme: ThemeData {
       primarySwatch: Colors.grey,
@@ -42,7 +42,7 @@ def MyHomePage {
     platform.send(_pong);
   }
 
-  Scaffold {
+  ..Scaffold {
     body: Column {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

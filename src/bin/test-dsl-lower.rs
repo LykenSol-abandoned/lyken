@@ -1,13 +1,10 @@
-#![feature(rustc_private)]
-
 extern crate lyken;
 
 use std::env;
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::prelude::*;
-use lyken::dart::lex::Lexer;
-use lyken::dart::parse::{Error, ErrorKind, Parser};
+use lyken::dart::parse::Parser;
 use lyken::dart::print::Printer;
 use lyken::dsl::lower::Lowerer;
 

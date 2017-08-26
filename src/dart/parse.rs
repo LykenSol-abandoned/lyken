@@ -145,7 +145,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn eat_punctuation2(&mut self, c1: char, c2: char) -> bool {
+    pub fn eat_punctuation2(&mut self, c1: char, c2: char) -> bool {
         self.try(|p| p.expect_punctuation2(c1, c2)).is_some()
     }
 

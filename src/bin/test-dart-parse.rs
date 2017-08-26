@@ -1,11 +1,8 @@
-#![feature(rustc_private)]
-
 extern crate walkdir;
 extern crate lyken;
 
 use walkdir::WalkDir;
-use lyken::dart::lex::Lexer;
-use lyken::dart::parse::{self, Parser};
+use lyken::dart::parse::Parser;
 use std::env;
 
 fn main() {
