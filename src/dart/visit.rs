@@ -1,8 +1,12 @@
 use dart::ast::{Args, ClassMember, ConstructorInitializer, Expr, FnBody, FnSig, ForLoop, Function,
-                Item, Metadata, Statement, StringLiteral, Suffix, Type, TypeParameter, VarDef};
+                Item, Metadata, Module, Statement, StringLiteral, Suffix, Type, TypeParameter,
+                VarDef};
 use node::Node;
 
 pub trait Visitor: Sized {
+    fn visit_module(&mut self, module: Node<Module>) {
+        walk_module(self, module)
+    }
     fn visit_item(&mut self, item: Node<Item>) {
         walk_item(self, item)
     }
@@ -15,7 +19,7 @@ pub trait Visitor: Sized {
     fn visit_metadata(&mut self, metadata: &Metadata) {
         walk_metadata(self, metadata)
     }
-    fn visit_generics(&mut self, generics: &[TypeParameter]) {
+    fn visit_generics(&mut self, generics: &[Node<TypeParameter>]) {
         walk_generics(self, generics)
     }
     fn visit_type(&mut self, ty: Node<Type>) {
@@ -57,6 +61,12 @@ pub trait Visit {
     fn visit<V: Visitor>(&self, visitor: &mut V);
 }
 
+impl Visit for Node<Module> {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_module(self.clone());
+    }
+}
+
 impl Visit for Node<Item> {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.visit_item(self.clone());
@@ -81,7 +91,7 @@ impl Visit for Metadata {
     }
 }
 
-impl Visit for [TypeParameter] {
+impl Visit for [Node<TypeParameter>] {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.visit_generics(self);
     }
@@ -153,6 +163,12 @@ impl Visit for StringLiteral {
     }
 }
 
+pub fn walk_module<V: Visitor>(visitor: &mut V, module: Node<Module>) {
+    for item in &module.items {
+        item.visit(visitor);
+    }
+}
+
 pub fn walk_item<V: Visitor>(visitor: &mut V, item: Node<Item>) {
     match *item {
         Item::LibraryName { ref metadata, .. } |
@@ -171,9 +187,11 @@ pub fn walk_item<V: Visitor>(visitor: &mut V, item: Node<Item>) {
         Item::Part {
             ref metadata,
             ref uri,
+            ref module,
         } => {
             metadata.visit(visitor);
             uri.visit(visitor);
+            module.visit(visitor);
         }
         Item::Class {
             ref metadata,
@@ -308,7 +326,7 @@ pub fn walk_metadata<V: Visitor>(visitor: &mut V, metadata: &Metadata) {
     }
 }
 
-pub fn walk_generics<V: Visitor>(visitor: &mut V, generics: &[TypeParameter]) {
+pub fn walk_generics<V: Visitor>(visitor: &mut V, generics: &[Node<TypeParameter>]) {
     for generic in generics {
         if let Some(ref extension) = generic.extends {
             extension.visit(visitor);

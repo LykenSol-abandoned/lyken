@@ -23,6 +23,10 @@ name = "test-dart-parse"
 test = false
 
 [[bin]]
+name = "test-dart-resolve"
+test = false
+
+[[bin]]
 name = "test-dsl-lift"
 test = false
 

@@ -1,68 +1,190 @@
-use dart::ast::{ClassMember, Expr, FnName, ForLoop, Function, Item, Qualified, Statement, Type,
-                VarDef};
+use dart::ast::{ClassMember, Expr, FnName, ForLoop, Function, Import, ImportFilter, Item, Module,
+                Qualified, Statement, Type, TypeParameter, VarDef};
 use dart::visit::{self, Visit, Visitor};
+use dart::sdk::PLATFORM;
 use node::Node;
 use std::collections::HashMap;
 use syntax::symbol::Symbol;
 
 #[derive(Clone, Debug)]
 pub enum Res {
+    Void,
+    Dynamic,
+    Null,
+    False,
+    True,
     This,
     Super,
     Var(Node<VarDef>),
     Function(Node<Function>),
+    Getter(Node<Function>),
+    Setter(Node<Function>),
+    GetterSetter(Node<Function>, Node<Function>),
     Class(Node<Item>),
     Enum(Node<Item>),
     TypeAlias(Node<Item>),
+    TypeParameter(Node<TypeParameter>),
 }
 
 node_field!(res: Res);
 
-pub fn resolve(items: &[Node<Item>]) {
+pub fn resolve(module: Node<Module>) {
     let mut resolver = Resolver {
         collector: Collector {
             map: HashMap::new(),
+            root_module: module.clone(),
         },
     };
-    for item in items {
+    let mut core_prelude = true;
+    for item in &module.items {
         match **item {
-            Item::Class { name, .. } | Item::MixinClass { name, .. } => {
-                resolver
-                    .collector
-                    .map
-                    .insert(name, Res::Class(item.clone()));
+            Item::LibraryName { ref path, .. } => {
+                if *path == [Symbol::intern("dart"), Symbol::intern("core")] {
+                    core_prelude = false;
+                }
             }
-            Item::Enum { name, .. } => {
-                resolver.collector.map.insert(name, Res::Enum(item.clone()));
+            Item::Import(_, ref import) => {
+                resolver.collector.add_import_item(import);
             }
-            Item::TypeAlias { name, .. } => {
-                resolver
-                    .collector
-                    .map
-                    .insert(name, Res::TypeAlias(item.clone()));
-            }
-            Item::Function(ref function) => {
-                function.visit(&mut resolver.collector);
-            }
-            Item::Vars(_, ref vars) => for var in vars {
-                var.visit(&mut resolver.collector);
-            },
             _ => {}
         }
     }
-    for item in items {
-        item.visit(&mut resolver);
+    if core_prelude {
+        resolver.collector.add_import("dart:core", &[]);
     }
+    resolver
+        .collector
+        .map
+        .insert(Symbol::intern("void"), Res::Void);
+    resolver
+        .collector
+        .map
+        .insert(Symbol::intern("dynamic"), Res::Dynamic);
+    resolver
+        .collector
+        .map
+        .insert(Symbol::intern("null"), Res::Null);
+    resolver
+        .collector
+        .map
+        .insert(Symbol::intern("false"), Res::False);
+    resolver
+        .collector
+        .map
+        .insert(Symbol::intern("true"), Res::True);
+    module.visit(&mut resolver.collector);
+    module.visit(&mut resolver);
 }
 
 struct Collector {
     map: HashMap<Symbol, Res>,
+    root_module: Node<Module>,
+}
+
+impl Collector {
+    fn add_import_item(&mut self, import: &Import) {
+        if import.deferred {
+            return;
+        }
+        if import.as_ident != None {
+            return;
+        }
+        self.add_import(&import.uri.get_simple_string(), &import.filters);
+    }
+    fn add_import(&mut self, uri: &str, _filters: &[ImportFilter]) {
+        let module = if uri.starts_with("dart:") {
+            let lib = &uri["dart:".len()..];
+            PLATFORM.with(|p| Module::load(&p.libraries[lib]))
+        } else {
+            Module::load(&self.root_module.path.parent().unwrap().join(uri))
+        };
+        module.visit(self);
+    }
+    fn lookup_qualified(&mut self, qualified: Qualified) -> Option<Res> {
+        if qualified.prefix.is_none() {
+            self.map.get(&qualified.name).cloned()
+        } else {
+            None
+        }
+    }
+    fn collect_class_members(
+        &mut self,
+        superclass: Option<Node<Type>>,
+        members: &[Node<ClassMember>],
+    ) {
+        if let Some(superclass) = superclass {
+            if let Type::Path(qualified, _) = *superclass {
+                if let Some(Res::Class(item)) = self.lookup_qualified(qualified) {
+                    if let Item::Class {
+                        ref superclass,
+                        ref members,
+                        ..
+                    } = *item
+                    {
+                        self.collect_class_members(superclass.clone(), members);
+                    } else {
+                        println!("superclass is not Class: {:#?}", item);
+                    }
+                } else {
+                    println!("unknown superclass {:?}", qualified);
+                }
+            }
+        }
+        for member in members {
+            member.visit(self);
+        }
+    }
 }
 
 impl Visitor for Collector {
+    fn visit_item(&mut self, item: Node<Item>) {
+        match *item {
+            Item::Class { name, .. } | Item::MixinClass { name, .. } => {
+                self.map.insert(name, Res::Class(item.clone()));
+            }
+            Item::Enum { name, .. } => {
+                self.map.insert(name, Res::Enum(item.clone()));
+            }
+            Item::TypeAlias { name, .. } => {
+                self.map.insert(name, Res::TypeAlias(item.clone()));
+            }
+            Item::Function(ref function) => {
+                function.visit(self);
+            }
+            Item::Vars(_, ref vars) => for var in vars {
+                var.visit(self);
+            },
+            Item::Part { ref module, .. } => {
+                module.visit(self);
+            }
+            _ => {}
+        }
+    }
+    fn visit_class_member(&mut self, class_member: Node<ClassMember>) {
+        match *class_member {
+            ClassMember::Fields {
+                ref initializers, ..
+            } => for field in initializers {
+                field.visit(self);
+            },
+            ClassMember::Method(_, _, ref function) => {
+                function.visit(self);
+            }
+            _ => {}
+        }
+    }
     fn visit_function(&mut self, function: Node<Function>) {
-        if let FnName::Regular(name) = function.name {
-            self.map.insert(name, Res::Function(function.clone()));
+        match function.name {
+            FnName::Regular(name) => {
+                self.map.insert(name, Res::Function(function.clone()));
+            }
+            FnName::Getter(name) => {
+                self.map.insert(name, Res::Getter(function.clone()));
+            }
+            FnName::Setter(name) => {
+                self.map.insert(name, Res::Setter(function.clone()));
+            }
+            _ => {}
         }
     }
     fn visit_var_def(&mut self, var: Node<VarDef>) {
@@ -85,21 +207,15 @@ impl Resolver {
 
 impl Visitor for Resolver {
     fn visit_item(&mut self, item: Node<Item>) {
-        if let Item::Class { ref members, .. } = *item {
+        if let Item::Class {
+            ref members,
+            ref superclass,
+            ..
+        } = *item
+        {
             self.in_lexical_scope(|this| {
-                for member in members {
-                    match **member {
-                        ClassMember::Fields {
-                            ref initializers, ..
-                        } => for field in initializers {
-                            field.visit(&mut this.collector);
-                        },
-                        ClassMember::Method(_, _, ref function) => {
-                            function.visit(&mut this.collector);
-                        }
-                        _ => {}
-                    }
-                }
+                this.collector
+                    .collect_class_members(superclass.clone(), members);
                 this.collector.map.insert(Symbol::intern("this"), Res::This);
                 this.collector
                     .map
@@ -132,14 +248,26 @@ impl Visitor for Resolver {
         if let Expr::Identifier(name) = *expr {
             if let Some(res) = self.collector.map.get(&name) {
                 expr.res().set(res.clone());
+            } else {
+                println!("unknown value {}", name);
             }
         }
         visit::walk_expr(self, expr)
     }
+    fn visit_generics(&mut self, generics: &[Node<TypeParameter>]) {
+        for generic in generics {
+            self.collector
+                .map
+                .insert(generic.name, Res::TypeParameter(generic.clone()));
+        }
+        visit::walk_generics(self, generics)
+    }
     fn visit_type(&mut self, ty: Node<Type>) {
-        if let Type::Path(Qualified { prefix: None, name }, _) = *ty {
-            if let Some(res) = self.collector.map.get(&name) {
-                ty.res().set(res.clone());
+        if let Type::Path(qualified, _) = *ty {
+            if let Some(res) = self.collector.lookup_qualified(qualified) {
+                ty.res().set(res);
+            } else {
+                println!("unknown type {:?}", qualified);
             }
         }
         visit::walk_type(self, ty)
