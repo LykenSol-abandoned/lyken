@@ -5,6 +5,13 @@ use node::Node;
 
 pub struct Lowerer {}
 
+#[derive(Copy, Clone)]
+enum Strategy {
+    Plain,
+    StetelessWidget,
+    StatefulWidget,
+}
+
 impl Lowerer {
     pub fn new() -> Self {
         Lowerer {}
@@ -20,19 +27,23 @@ impl Lowerer {
     fn lower_item(&mut self, item: &Item) -> Vec<Node<ast::Item>> {
         match *item {
             Item::ComponentDef {
-                mut name,
+                name,
                 ref fields,
                 ref dart_members,
                 ref body,
             } => {
+                let strategy = if body.is_none() {
+                    Strategy::Plain
+                } else if fields.iter().any(|f| f.mutable) {
+                    Strategy::StatefulWidget
+                } else {
+                    Strategy::StetelessWidget
+                };
+
                 let mut items = vec![];
-                let mut superclass = Some(ast::Type::simple_path("StatelessWidget"));
                 let mut class_members = vec![];
-                if fields.iter().any(|f| f.mutable) {
-                    superclass = Some(ast::Type::simple_path("StatefulWidget"));
-
+                if let Strategy::StatefulWidget = strategy {
                     let state_name = format!("_{}State", name.as_str().trim_left_matches('_'));
-
 
                     class_members.extend(
                         fields
@@ -41,8 +52,10 @@ impl Lowerer {
                             .map(|field| self.lower_field_def(field)),
                     );
                     let mut class_members = vec![];
-                    class_members
-                        .extend(self.lower_constructor(fields.iter().filter(|f| !f.mutable)));
+                    class_members.extend(self.lower_constructor(
+                        strategy,
+                        fields.iter().filter(|f| !f.mutable),
+                    ));
 
                     class_members.extend(
                         fields
@@ -82,25 +95,14 @@ impl Lowerer {
                         abstract_: false,
                         name,
                         generics: vec![],
-                        superclass,
+                        superclass: Some(ast::Type::simple_path("StatefulWidget")),
                         mixins: vec![],
                         interfaces: vec![],
                         members: class_members,
                     }));
 
-                    superclass = Some(Node::new(ast::Type::Path(
-                        ast::Qualified::simple("State"),
-                        vec![
-                            Node::new(ast::Type::Path(
-                                ast::Qualified { prefix: None, name },
-                                vec![],
-                            )),
-                        ],
-                    )));
-                    name = Symbol::intern(&state_name);
                 } else {
-                    class_members.extend(self.lower_constructor(fields));
-
+                    class_members.extend(self.lower_constructor(strategy, fields));
                     class_members.extend(fields.iter().map(|field| self.lower_field_def(field)));
                 }
 
@@ -133,10 +135,29 @@ impl Lowerer {
                     )));
                 }
 
+                let superclass = match strategy {
+                    Strategy::StetelessWidget => Some(ast::Type::simple_path("StatelessWidget")),
+                    Strategy::StatefulWidget => Some(Node::new(ast::Type::Path(
+                        ast::Qualified::simple("State"),
+                        vec![
+                            Node::new(ast::Type::Path(
+                                ast::Qualified { prefix: None, name },
+                                vec![],
+                            )),
+                        ],
+                    ))),
+                    Strategy::Plain => None,
+                };
+
                 items.push(Node::new(ast::Item::Class {
                     metadata: vec![],
                     abstract_: false,
-                    name,
+                    name: match strategy {
+                        Strategy::StatefulWidget => Symbol::intern(
+                            &format!("_{}State", name.as_str().trim_left_matches('_')),
+                        ),
+                        Strategy::Plain | Strategy::StetelessWidget => name,
+                    },
                     generics: vec![],
                     superclass,
                     mixins: vec![],
@@ -151,14 +172,24 @@ impl Lowerer {
 
     fn lower_constructor<'a, I: IntoIterator<Item = &'a FieldDef>>(
         &mut self,
+        strategy: Strategy,
         fields: I,
     ) -> Option<Node<ast::ClassMember>> {
-        let mut args = vec![ast::ArgDef::simple(ast::Type::simple_path("Key"), "key")];
+        let mut args = vec![];
 
+        match strategy {
+            Strategy::Plain => {}
+            Strategy::StatefulWidget | Strategy::StetelessWidget => {
+                args.push(ast::ArgDef::simple(ast::Type::simple_path("Key"), "key"));
+            }
+        }
+
+        let mut has_fields = false;
         for field in fields {
             if field.name.as_str().starts_with('_') {
                 continue;
             }
+            has_fields = true;
             args.push(ast::ArgDef {
                 metadata: vec![],
                 covariant: false,
@@ -177,7 +208,7 @@ impl Lowerer {
             });
         }
 
-        if args.len() == 1 {
+        if !has_fields {
             return None;
         }
 
@@ -194,20 +225,23 @@ impl Lowerer {
             method_qualifiers: vec![ast::MethodQualifiers::Const],
             name: None,
             sig,
-            initializers: vec![
-                ast::ConstructorInitializer::Super(
-                    None,
-                    ast::Args {
-                        unnamed: vec![],
-                        named: vec![
-                            ast::NamedArg {
-                                name: Symbol::intern("key"),
-                                expr: Node::new(ast::Expr::Identifier(Symbol::intern("key"))),
-                            },
-                        ],
-                    },
-                ),
-            ],
+            initializers: match strategy {
+                Strategy::Plain => vec![],
+                Strategy::StatefulWidget | Strategy::StetelessWidget => vec![
+                    ast::ConstructorInitializer::Super(
+                        None,
+                        ast::Args {
+                            unnamed: vec![],
+                            named: vec![
+                                ast::NamedArg {
+                                    name: Symbol::intern("key"),
+                                    expr: Node::new(ast::Expr::Identifier(Symbol::intern("key"))),
+                                },
+                            ],
+                        },
+                    ),
+                ],
+            },
             function_body: None,
         }))
     }
