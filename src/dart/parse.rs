@@ -6,13 +6,14 @@ use syntax::symbol::Symbol;
 use syntax::codemap::Span;
 use node::Node;
 use std::{iter, slice};
-use std::path::Path;
 
 type Tokens<'a> = iter::Cloned<slice::Iter<'a, (Span, Token)>>;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
 pub struct Parser<'a> {
     tokens: Tokens<'a>,
+    path: PathBuf,
     cur: Option<Token>,
     cur_span: Span,
     skip_blocks: bool,
@@ -60,22 +61,22 @@ macro_rules! expected {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: Tokens<'a>) -> Self {
+    pub fn with_file<F: FnOnce(Parser) -> ParseResult<R>, R>(path: &Path, f: F) -> ParseResult<R> {
+        let codemap = ::codemap();
+        let file = codemap
+            .get_filemap(path.to_str().unwrap())
+            .unwrap_or_else(|| codemap.load_file(path).unwrap());
+        let tokens = Lexer::new(::mk_sp(file.start_pos, file.end_pos))
+            .tokenize()?;
         let mut parser = Parser {
-            tokens,
+            path: path.to_path_buf(),
+            tokens: tokens.iter().cloned(),
             cur: None,
             cur_span: Span::default(),
             skip_blocks: false,
         };
         parser.bump();
-        parser
-    }
-
-    pub fn with_file<F: FnOnce(Parser) -> ParseResult<R>, R>(path: &Path, f: F) -> ParseResult<R> {
-        let file = ::codemap().load_file(path).unwrap();
-        let tokens = Lexer::new(::mk_sp(file.start_pos, file.end_pos))
-            .tokenize()?;
-        f(Parser::new(tokens.iter().cloned()))
+        f(parser)
     }
 
     pub fn skip_blocks(mut self) -> Self {
@@ -1261,7 +1262,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn dart_type_param_def(&mut self) -> ParseResult<TypeParameter> {
+    fn dart_type_param_def(&mut self) -> ParseResult<Node<TypeParameter>> {
         let metadata = self.dart_metadata()?;
         let name = self.parse_ident()?;
         let extends = if self.eat_keyword("extends") {
@@ -1269,11 +1270,11 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
-        Ok(TypeParameter {
+        Ok(Node::new(TypeParameter {
             metadata,
             name,
             extends,
-        })
+        }))
     }
 
     fn dart_name_and_initializer(&mut self) -> ParseResult<Node<VarDef>> {
@@ -1598,7 +1599,11 @@ impl<'a> Parser<'a> {
             }
             let uri = self.dart_string_literal()?;
             self.expect_punctuation(';')?;
-            return Ok(Node::new(Item::Part { metadata, uri }));
+            return Ok(Node::new(Item::Part {
+                metadata,
+                module: Module::load(&self.path.parent().unwrap().join(uri.get_simple_string())),
+                uri,
+            }));
         }
 
         let _external = self.eat_keyword("external");
@@ -1789,11 +1794,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn dart_items(&mut self) -> ParseResult<Vec<Node<Item>>> {
+    pub fn dart_module(mut self) -> ParseResult<Node<Module>> {
         let mut items = vec![];
         while !self.out_of_tokens() {
             items.push(self.dart_item()?);
         }
-        Ok(items)
+        Ok(Node::new(Module {
+            path: self.path,
+            items,
+            has_error: false,
+        }))
     }
 }

@@ -146,6 +146,7 @@ impl Printer {
             Item::Part {
                 ref metadata,
                 ref uri,
+                module: _,
             } => {
                 self.dart_metadata(metadata);
                 self.print_str("part ");
@@ -781,7 +782,13 @@ impl Printer {
         }
     }
 
-    fn dart_typed_name(&mut self, ty: &Type, prefix: &str, name: Symbol, params: &[TypeParameter]) {
+    fn dart_typed_name(
+        &mut self,
+        ty: &Type,
+        prefix: &str,
+        name: Symbol,
+        params: &[Node<TypeParameter>],
+    ) {
         match *ty {
             Type::Path(..) | Type::Infer | Type::Function(..) => {
                 self.dart_type_spaced(ty);
@@ -966,7 +973,7 @@ impl Printer {
         }
     }
 
-    fn dart_type_parameter(&mut self, param: &TypeParameter) {
+    fn dart_type_parameter(&mut self, param: &Node<TypeParameter>) {
         self.dart_metadata(&param.metadata);
         self.print_str(" ");
         self.print_ident(param.name);

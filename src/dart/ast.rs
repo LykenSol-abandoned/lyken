@@ -1,8 +1,46 @@
+use dart::parse::Parser;
 use enum_primitive::FromPrimitive;
+use node::Node;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::iter;
+use std::path::{Path, PathBuf};
 use syntax::symbol::Symbol;
 use syntax::codemap::Span;
-use node::Node;
+
+#[derive(Debug)]
+pub struct Module {
+    pub path: PathBuf,
+    pub items: Vec<Node<Item>>,
+    pub has_error: bool,
+}
+
+impl Module {
+    pub fn load(path: &Path) -> Node<Module> {
+        thread_local!(static CACHE: RefCell<HashMap<PathBuf, Node<Module>>> =
+            RefCell::new(HashMap::new()));
+
+        let path = path.canonicalize().unwrap();
+        if let Some(module) = CACHE.with(|c| c.borrow().get(&path).cloned()) {
+            return module;
+        }
+        let module = match Parser::with_file(&path, |p| p.dart_module()) {
+            Ok(module) => module,
+            Err(error) => {
+                println!("{}", error);
+                Node::new(Module {
+                    path: path.to_path_buf(),
+                    items: vec![],
+                    has_error: true,
+                })
+            }
+        };
+        CACHE.with(|c| {
+            c.borrow_mut().insert(module.path.clone(), module.clone())
+        });
+        module
+    }
+}
 
 #[derive(Debug)]
 pub enum Item {
@@ -15,6 +53,7 @@ pub enum Item {
     Part {
         metadata: Metadata,
         uri: StringLiteral,
+        module: Node<Module>,
     },
     PartOf {
         metadata: Metadata,
@@ -24,7 +63,7 @@ pub enum Item {
         metadata: Metadata,
         abstract_: bool,
         name: Symbol,
-        generics: Vec<TypeParameter>,
+        generics: Vec<Node<TypeParameter>>,
         superclass: Option<Node<Type>>,
         mixins: Vec<Node<Type>>,
         interfaces: Vec<Node<Type>>,
@@ -34,7 +73,7 @@ pub enum Item {
         metadata: Metadata,
         abstract_: bool,
         name: Symbol,
-        generics: Vec<TypeParameter>,
+        generics: Vec<Node<TypeParameter>>,
         mixins: Vec<Node<Type>>,
         interfaces: Vec<Node<Type>>,
     },
@@ -46,7 +85,7 @@ pub enum Item {
     TypeAlias {
         metadata: Metadata,
         name: Symbol,
-        generics: Vec<TypeParameter>,
+        generics: Vec<Node<TypeParameter>>,
         ty: Node<Type>,
     },
     Function(Node<Function>),
@@ -70,7 +109,7 @@ pub struct Import {
 #[derive(Debug)]
 pub struct Function {
     pub name: FnName,
-    pub generics: Vec<TypeParameter>,
+    pub generics: Vec<Node<TypeParameter>>,
     pub sig: FnSig,
     pub body: Option<FnBody>,
 }
@@ -337,6 +376,13 @@ pub struct StringLiteral {
     pub quote: char,
     pub prefix: Span,
     pub interpolated: Vec<(Node<Expr>, Span)>,
+}
+
+impl StringLiteral {
+    pub fn get_simple_string(&self) -> String {
+        assert!(self.interpolated.is_empty());
+        ::codemap().span_to_snippet(self.prefix).unwrap()
+    }
 }
 
 #[derive(Debug)]
