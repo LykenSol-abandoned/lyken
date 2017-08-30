@@ -8,7 +8,7 @@ pub struct Lowerer {}
 #[derive(Copy, Clone)]
 enum Strategy {
     Plain,
-    StetelessWidget,
+    StatelessWidget,
     StatefulWidget,
 }
 
@@ -37,7 +37,7 @@ impl Lowerer {
                 } else if fields.iter().any(|f| f.mutable) {
                     Strategy::StatefulWidget
                 } else {
-                    Strategy::StetelessWidget
+                    Strategy::StatelessWidget
                 };
 
                 let mut items = vec![];
@@ -136,7 +136,7 @@ impl Lowerer {
                 }
 
                 let superclass = match strategy {
-                    Strategy::StetelessWidget => Some(ast::Type::simple_path("StatelessWidget")),
+                    Strategy::StatelessWidget => Some(ast::Type::simple_path("StatelessWidget")),
                     Strategy::StatefulWidget => Some(Node::new(ast::Type::Path(
                         ast::Qualified::simple("State"),
                         vec![
@@ -156,7 +156,7 @@ impl Lowerer {
                         Strategy::StatefulWidget => Symbol::intern(
                             &format!("_{}State", name.as_str().trim_left_matches('_')),
                         ),
-                        Strategy::Plain | Strategy::StetelessWidget => name,
+                        Strategy::Plain | Strategy::StatelessWidget => name,
                     },
                     generics: vec![],
                     superclass,
@@ -179,7 +179,7 @@ impl Lowerer {
 
         match strategy {
             Strategy::Plain => {}
-            Strategy::StatefulWidget | Strategy::StetelessWidget => {
+            Strategy::StatefulWidget | Strategy::StatelessWidget => {
                 args.push(ast::ArgDef::simple(ast::Type::simple_path("Key"), "key"));
             }
         }
@@ -227,7 +227,7 @@ impl Lowerer {
             sig,
             initializers: match strategy {
                 Strategy::Plain => vec![],
-                Strategy::StatefulWidget | Strategy::StetelessWidget => vec![
+                Strategy::StatefulWidget | Strategy::StatelessWidget => vec![
                     ast::ConstructorInitializer::Super(
                         None,
                         ast::Args {

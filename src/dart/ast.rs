@@ -140,7 +140,7 @@ pub enum ClassMember {
     },
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum MethodQualifiers {
     External,
     Static,
