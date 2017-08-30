@@ -23,11 +23,9 @@ impl Printer {
                 self.print_ident(name);
                 self.print_str(" {");
                 self.enter();
-                for (i, field) in fields.iter().enumerate() {
+                for field in fields {
                     self.dsl_field_def(field);
-                    if i < fields.len() - 1 {
-                        self.print_str(", ");
-                    }
+                    self.print_str(", ");
                 }
                 for dart_member in dart_members {
                     self.dart_class_member(dart_member, name);
