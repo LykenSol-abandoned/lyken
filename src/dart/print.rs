@@ -193,14 +193,14 @@ impl Printer {
                     self.print_str(" >");
                 }
                 self.print_str(" ");
-                if let Some(ref super_class) = *superclass {
+                if let Some(ref superclass) = *superclass {
                     self.print_str("extends ");
-                    self.dart_type(super_class);
+                    self.dart_qualified(superclass);
                     self.print_str(" ");
                     if !mixins.is_empty() {
                         self.print_str("with ");
-                        for (i, mix) in mixins.iter().enumerate() {
-                            self.dart_type(mix);
+                        for (i, mixin) in mixins.iter().enumerate() {
+                            self.dart_qualified(mixin);
                             if i < mixins.len() - 1 {
                                 self.print_str(", ");
                             }
@@ -210,7 +210,7 @@ impl Printer {
                 if !interfaces.is_empty() {
                     self.print_str("implements ");
                     for (i, interface) in interfaces.iter().enumerate() {
-                        self.dart_type(interface);
+                        self.dart_qualified(interface);
                         if i < interfaces.len() - 1 {
                             self.print_str(", ");
                         }
@@ -251,10 +251,10 @@ impl Printer {
                     self.print_str(">");
                 }
                 self.print_str(" = ");
-                self.dart_type(&mixins[0]);
+                self.dart_qualified(&mixins[0]);
                 self.print_str(" with ");
-                for (i, ty) in mixins[1..].iter().enumerate() {
-                    self.dart_type(ty);
+                for (i, mixin) in mixins[1..].iter().enumerate() {
+                    self.dart_qualified(mixin);
                     if i < mixins.len() - 1 {
                         self.print_str(", ");
                     }
@@ -262,7 +262,7 @@ impl Printer {
                 if !interfaces.is_empty() {
                     self.print_str("implements ");
                     for (i, interface) in interfaces.iter().enumerate() {
-                        self.dart_type(interface);
+                        self.dart_qualified(interface);
                         if i < interfaces.len() - 1 {
                             self.print_str(", ");
                         }
@@ -541,8 +541,7 @@ impl Printer {
             }
             Expr::New {
                 const_,
-                ref ty,
-                ctor,
+                ref path,
                 ref args,
             } => {
                 if const_ == true {
@@ -550,11 +549,7 @@ impl Printer {
                 } else {
                     self.print_str("new ");
                 }
-                self.dart_type(ty);
-                if let Some(ctor) = ctor {
-                    self.print_str(".");
-                    self.print_ident(ctor);
-                }
+                self.dart_qualified(path);
                 self.dart_arguments(args);
             }
             Expr::List {
@@ -745,18 +740,8 @@ impl Printer {
 
     pub fn dart_type(&mut self, ty: &Type) {
         match *ty {
-            Type::Path(ref qualified, ref types) => {
+            Type::Path(ref qualified) => {
                 self.dart_qualified(qualified);
-                if !types.is_empty() {
-                    self.print_str("<");
-                    for (i, ty) in types.iter().enumerate() {
-                        self.dart_type(ty);
-                        if i < types.len() - 1 {
-                            self.print_str(", ");
-                        }
-                    }
-                    self.print_str(">");
-                }
             }
             Type::Function(ref signature) => {
                 self.dart_type(&signature.return_type);
@@ -812,12 +797,23 @@ impl Printer {
         }
     }
 
-    fn dart_qualified(&mut self, obj: &Qualified) {
-        if let Some(pref) = obj.prefix {
-            self.print_ident(pref);
+    fn dart_qualified(&mut self, qualified: &Qualified) {
+        if let Some(ref prefix) = qualified.prefix {
+            self.dart_qualified(prefix);
             self.print_str(".");
         }
-        self.print_ident(obj.name);
+        self.print_ident(qualified.name);
+
+        if !qualified.params.is_empty() {
+            self.print_str("<");
+            for (i, ty) in qualified.params.iter().enumerate() {
+                self.dart_type(ty);
+                if i < qualified.params.len() - 1 {
+                    self.print_str(", ");
+                }
+            }
+            self.print_str(">");
+        }
     }
 
     fn dart_named_argurment(&mut self, arg: &NamedArg) {
@@ -951,11 +947,6 @@ impl Printer {
     fn dart_metadata_item(&mut self, item: &MetadataItem) {
         self.print_str("@");
         self.dart_qualified(&item.qualified);
-        if let Some(suffix) = item.suffix {
-            self.print_str(".");
-            self.print_ident(suffix);
-        }
-
         if let Some(ref args) = item.arguments {
             self.dart_arguments(args);
         }
@@ -977,9 +968,9 @@ impl Printer {
         self.dart_metadata(&param.metadata);
         self.print_str(" ");
         self.print_ident(param.name);
-        if let Some(ref ty) = param.extends {
+        if let Some(ref extends) = param.extends {
             self.print_str(" extends ");
-            self.dart_type(ty);
+            self.dart_qualified(extends);
         }
     }
 

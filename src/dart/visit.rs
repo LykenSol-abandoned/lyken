@@ -1,6 +1,6 @@
 use dart::ast::{Args, ClassMember, ConstructorInitializer, Expr, FnBody, FnSig, ForLoop, Function,
-                Item, Metadata, Module, Statement, StringLiteral, Suffix, Type, TypeParameter,
-                VarDef};
+                Item, Metadata, Module, Qualified, Statement, StringLiteral, Suffix, Type,
+                TypeParameter, VarDef};
 use node::Node;
 
 pub trait Visitor: Sized {
@@ -18,6 +18,9 @@ pub trait Visitor: Sized {
     }
     fn visit_metadata(&mut self, metadata: &Metadata) {
         walk_metadata(self, metadata)
+    }
+    fn visit_qualified(&mut self, qualified: Node<Qualified>) {
+        walk_qualified(self, qualified)
     }
     fn visit_generics(&mut self, generics: &[Node<TypeParameter>]) {
         walk_generics(self, generics)
@@ -88,6 +91,12 @@ impl Visit for ConstructorInitializer {
 impl Visit for Metadata {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.visit_metadata(self);
+    }
+}
+
+impl Visit for Node<Qualified> {
+    fn visit<V: Visitor>(&self, visitor: &mut V) {
+        visitor.visit_qualified(self.clone());
     }
 }
 
@@ -320,9 +329,19 @@ pub fn walk_constructor_initializer<V: Visitor>(
 
 pub fn walk_metadata<V: Visitor>(visitor: &mut V, metadata: &Metadata) {
     for metadata_item in metadata {
+        metadata_item.qualified.visit(visitor);
         if let Some(ref arguments) = metadata_item.arguments {
             arguments.visit(visitor);
         }
+    }
+}
+
+pub fn walk_qualified<V: Visitor>(visitor: &mut V, qualified: Node<Qualified>) {
+    if let Some(ref prefix) = qualified.prefix {
+        prefix.visit(visitor);
+    }
+    for ty in &qualified.params {
+        ty.visit(visitor);
     }
 }
 
@@ -336,9 +355,9 @@ pub fn walk_generics<V: Visitor>(visitor: &mut V, generics: &[Node<TypeParameter
 
 pub fn walk_type<V: Visitor>(visitor: &mut V, ty: Node<Type>) {
     match *ty {
-        Type::Path(_, ref params) => for ty in params {
-            ty.visit(visitor);
-        },
+        Type::Path(ref qualified) => {
+            qualified.visit(visitor);
+        }
         Type::FunctionOld(ref sig) | Type::Function(ref sig) => {
             sig.visit(visitor);
         }
@@ -504,9 +523,9 @@ pub fn walk_expr<V: Visitor>(visitor: &mut V, expr: Node<Expr>) {
         }
         Expr::Identifier(_) => {}
         Expr::New {
-            ref ty, ref args, ..
+            ref path, ref args, ..
         } => {
-            ty.visit(visitor);
+            path.visit(visitor);
             args.visit(visitor);
         }
         Expr::List {

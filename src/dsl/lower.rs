@@ -80,8 +80,7 @@ impl Lowerer {
                             },
                             body: Some(ast::FnBody::Arrow(Node::new(ast::Expr::New {
                                 const_: false,
-                                ty: ast::Type::simple_path(&state_name),
-                                ctor: None,
+                                path: ast::Qualified::one(&state_name, vec![]),
                                 args: ast::Args {
                                     unnamed: vec![],
                                     named: vec![],
@@ -95,7 +94,7 @@ impl Lowerer {
                         abstract_: false,
                         name,
                         generics: vec![],
-                        superclass: Some(ast::Type::simple_path("StatefulWidget")),
+                        superclass: Some(ast::Qualified::one("StatefulWidget", vec![])),
                         mixins: vec![],
                         interfaces: vec![],
                         members: class_members,
@@ -136,16 +135,19 @@ impl Lowerer {
                 }
 
                 let superclass = match strategy {
-                    Strategy::StatelessWidget => Some(ast::Type::simple_path("StatelessWidget")),
-                    Strategy::StatefulWidget => Some(Node::new(ast::Type::Path(
-                        ast::Qualified::simple("State"),
+                    Strategy::StatelessWidget => {
+                        Some(ast::Qualified::one("StatelessWidget", vec![]))
+                    }
+                    Strategy::StatefulWidget => Some(ast::Qualified::one(
+                        "State",
                         vec![
-                            Node::new(ast::Type::Path(
-                                ast::Qualified { prefix: None, name },
-                                vec![],
-                            )),
+                            Node::new(ast::Type::Path(Node::new(ast::Qualified {
+                                prefix: None,
+                                name,
+                                params: vec![],
+                            }))),
                         ],
-                    ))),
+                    )),
                     Strategy::Plain => None,
                 };
 
@@ -293,11 +295,11 @@ impl Lowerer {
                 let named = fields.iter().map(|field| self.lower_field(field)).collect();
                 Node::new(ast::Expr::New {
                     const_: false,
-                    ty: Node::new(ast::Type::Path(
-                        ast::Qualified { prefix: None, name },
-                        vec![],
-                    )),
-                    ctor: None,
+                    path: Node::new(ast::Qualified {
+                        prefix: None,
+                        name,
+                        params: vec![],
+                    }),
                     args: ast::Args { unnamed, named },
                 })
             }

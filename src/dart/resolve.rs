@@ -1,5 +1,5 @@
 use dart::ast::{ClassMember, Expr, FnName, ForLoop, Function, Import, ImportFilter, Item, Module,
-                Qualified, Statement, Type, TypeParameter, VarDef};
+                Qualified, Statement, TypeParameter, VarDef};
 use dart::visit::{self, Visit, Visitor};
 use dart::sdk::PLATFORM;
 use node::Node;
@@ -21,9 +21,31 @@ pub enum Res {
     Setter(Node<Function>),
     GetterSetter(Node<Function>, Node<Function>),
     Class(Node<Item>),
+    Constructor(Node<ClassMember>),
     Enum(Node<Item>),
     TypeAlias(Node<Item>),
     TypeParameter(Node<TypeParameter>),
+}
+
+impl Res {
+    pub fn lookup_member(&self, name: Symbol) -> Option<Res> {
+        if let Res::Class(ref item) = *self {
+            if let Item::Class {
+                ref superclass,
+                ref members,
+                ..
+            } = **item
+            {
+                let mut collector = Collector {
+                    map: HashMap::new(),
+                    root_module: None,
+                };
+                collector.collect_class_members(superclass.clone(), members);
+                return collector.map.get(&name).cloned();
+            }
+        }
+        None
+    }
 }
 
 node_field!(res: Res);
@@ -32,7 +54,7 @@ pub fn resolve(module: Node<Module>) {
     let mut resolver = Resolver {
         collector: Collector {
             map: HashMap::new(),
-            root_module: module.clone(),
+            root_module: Some(module.clone()),
         },
     };
     let mut core_prelude = true;
@@ -78,7 +100,7 @@ pub fn resolve(module: Node<Module>) {
 
 struct Collector {
     map: HashMap<Symbol, Res>,
-    root_module: Node<Module>,
+    root_module: Option<Node<Module>>,
 }
 
 impl Collector {
@@ -96,38 +118,45 @@ impl Collector {
             let lib = &uri["dart:".len()..];
             PLATFORM.with(|p| Module::load(&p.libraries[lib]))
         } else {
-            Module::load(&self.root_module.path.parent().unwrap().join(uri))
+            Module::load(&self.root_module
+                .as_ref()
+                .unwrap()
+                .path
+                .parent()
+                .unwrap()
+                .join(uri))
         };
         module.visit(self);
     }
-    fn lookup_qualified(&mut self, qualified: Qualified) -> Option<Res> {
-        if qualified.prefix.is_none() {
-            self.map.get(&qualified.name).cloned()
+
+    fn lookup_qualified(&mut self, qualified: &Qualified) -> Option<Res> {
+        if let Some(ref prefix) = qualified.prefix {
+            self.lookup_qualified(prefix)
+                .and_then(|prefix| prefix.lookup_member(qualified.name))
         } else {
-            None
+            self.map.get(&qualified.name).cloned()
         }
     }
+
     fn collect_class_members(
         &mut self,
-        superclass: Option<Node<Type>>,
+        superclass: Option<Node<Qualified>>,
         members: &[Node<ClassMember>],
     ) {
         if let Some(superclass) = superclass {
-            if let Type::Path(qualified, _) = *superclass {
-                if let Some(Res::Class(item)) = self.lookup_qualified(qualified) {
-                    if let Item::Class {
-                        ref superclass,
-                        ref members,
-                        ..
-                    } = *item
-                    {
-                        self.collect_class_members(superclass.clone(), members);
-                    } else {
-                        println!("superclass is not Class: {:#?}", item);
-                    }
+            if let Some(Res::Class(item)) = self.lookup_qualified(&superclass) {
+                if let Item::Class {
+                    ref superclass,
+                    ref members,
+                    ..
+                } = *item
+                {
+                    self.collect_class_members(superclass.clone(), members);
                 } else {
-                    println!("unknown superclass {:?}", qualified);
+                    println!("superclass is not Class: {:#?}", item);
                 }
+            } else {
+                println!("unknown superclass {:?}", superclass);
             }
         }
         for member in members {
@@ -169,6 +198,12 @@ impl Visitor for Collector {
             },
             ClassMember::Method(_, _, ref function) => {
                 function.visit(self);
+            }
+            ClassMember::Constructor {
+                name: Some(name), ..
+            } => {
+                self.map
+                    .insert(name, Res::Constructor(class_member.clone()));
             }
             _ => {}
         }
@@ -254,6 +289,14 @@ impl Visitor for Resolver {
         }
         visit::walk_expr(self, expr)
     }
+    fn visit_qualified(&mut self, qualified: Node<Qualified>) {
+        if let Some(res) = self.collector.lookup_qualified(&qualified) {
+            qualified.res().set(res);
+        } else {
+            println!("unknown path {:?}", qualified);
+        }
+        visit::walk_qualified(self, qualified)
+    }
     fn visit_generics(&mut self, generics: &[Node<TypeParameter>]) {
         for generic in generics {
             self.collector
@@ -261,15 +304,5 @@ impl Visitor for Resolver {
                 .insert(generic.name, Res::TypeParameter(generic.clone()));
         }
         visit::walk_generics(self, generics)
-    }
-    fn visit_type(&mut self, ty: Node<Type>) {
-        if let Type::Path(qualified, _) = *ty {
-            if let Some(res) = self.collector.lookup_qualified(qualified) {
-                ty.res().set(res);
-            } else {
-                println!("unknown type {:?}", qualified);
-            }
-        }
-        visit::walk_type(self, ty)
     }
 }

@@ -50,12 +50,9 @@ impl Lifter {
                 let strategy = match *superclass {
                     Some(ref superclass) => {
                         require![
-                            match **superclass {
-                                Type::Path(ref name, ref types) if types.is_empty() => {
-                                    name.prefix.is_none() && name.name == "StatelessWidget"
-                                }
-                                _ => false,
-                            }
+                            superclass.params.is_empty(),
+                            superclass.prefix.is_none(),
+                            superclass.name == "StatelessWidget"
                         ];
                         Strategy::StatelessWidget
                     }
@@ -107,10 +104,9 @@ impl Lifter {
                             }
                             require![
                                 meta.len() == 1,
-                                meta[0].suffix.is_none(),
-                                meta[0].arguments.is_none(),
                                 meta[0].qualified.prefix.is_none(),
                                 meta[0].qualified.name == "override",
+                                meta[0].arguments.is_none(),
                                 qualif.is_empty(),
                                 function.generics.is_empty(),
                                 match function.body {
@@ -176,9 +172,10 @@ impl Lifter {
                                             !sig.optional[0].field &&
                                             sig.optional[0].var.name == "key" &&
                                             match *sig.optional[0].ty.ty {
-                                                Type::Path(ref name, ref types) => {
-                                                    name.prefix.is_none() && name.name == "Key" &&
-                                                        types.is_empty()
+                                                Type::Path(ref qualified) => {
+                                                    qualified.prefix.is_none() &&
+                                                        qualified.name == "Key" &&
+                                                        qualified.params.is_empty()
                                                 }
                                                 _ => false,
                                             }
@@ -246,35 +243,31 @@ impl Lifter {
             }
             Expr::New {
                 const_: _,
-                ref ty,
-                ctor: None,
+                ref path,
                 ref args,
-            } => match *ty.clone() {
-                Type::Path(ref name, ref path) => {
-                    if name.prefix.is_some() {
-                        return ast::Expr::Dart(expr);
-                    }
-                    if !path.is_empty() {
-                        return ast::Expr::Dart(expr);
-                    }
-                    let mut fields = vec![];
-                    let mut unnamed = vec![];
-
-                    for arg in &args.unnamed {
-                        unnamed.push(self.lift_expr(arg.clone()));
-                    }
-
-                    for arg in &args.named {
-                        fields.push(self.lift_field(arg));
-                    }
-                    ast::Expr::Instance {
-                        name: name.name,
-                        unnamed,
-                        fields,
-                    }
+            } => {
+                if path.prefix.is_some() {
+                    return ast::Expr::Dart(expr);
                 }
-                _ => ast::Expr::Dart(expr),
-            },
+                if !path.params.is_empty() {
+                    return ast::Expr::Dart(expr);
+                }
+                let mut fields = vec![];
+                let mut unnamed = vec![];
+
+                for arg in &args.unnamed {
+                    unnamed.push(self.lift_expr(arg.clone()));
+                }
+
+                for arg in &args.named {
+                    fields.push(self.lift_field(arg));
+                }
+                ast::Expr::Instance {
+                    name: path.name,
+                    unnamed,
+                    fields,
+                }
+            }
             _ => ast::Expr::Dart(expr),
         }
     }
