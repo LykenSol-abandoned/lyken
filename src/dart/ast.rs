@@ -64,9 +64,9 @@ pub enum Item {
         abstract_: bool,
         name: Symbol,
         generics: Vec<Node<TypeParameter>>,
-        superclass: Option<Node<Type>>,
-        mixins: Vec<Node<Type>>,
-        interfaces: Vec<Node<Type>>,
+        superclass: Option<Node<Qualified>>,
+        mixins: Vec<Node<Qualified>>,
+        interfaces: Vec<Node<Qualified>>,
         members: Vec<Node<ClassMember>>,
     },
     MixinClass {
@@ -74,8 +74,8 @@ pub enum Item {
         abstract_: bool,
         name: Symbol,
         generics: Vec<Node<TypeParameter>>,
-        mixins: Vec<Node<Type>>,
-        interfaces: Vec<Node<Type>>,
+        mixins: Vec<Node<Qualified>>,
+        interfaces: Vec<Node<Qualified>>,
     },
     Enum {
         metadata: Metadata,
@@ -178,21 +178,23 @@ pub enum ConstructorInitializer {
 pub struct TypeParameter {
     pub metadata: Metadata,
     pub name: Symbol,
-    pub extends: Option<Node<Type>>,
+    pub extends: Option<Node<Qualified>>,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct Qualified {
-    pub prefix: Option<Symbol>,
+    pub prefix: Option<Node<Qualified>>,
     pub name: Symbol,
+    pub params: Vec<Node<Type>>,
 }
 
 impl Qualified {
-    pub fn simple(name: &str) -> Qualified {
-        Qualified {
+    pub fn one(name: &str, params: Vec<Node<Type>>) -> Node<Qualified> {
+        Node::new(Qualified {
             prefix: None,
             name: Symbol::intern(name),
-        }
+            params,
+        })
     }
 }
 
@@ -316,7 +318,7 @@ impl BinOp {
 
 #[derive(Debug)]
 pub enum Type {
-    Path(Qualified, Vec<Node<Type>>),
+    Path(Node<Qualified>),
     FunctionOld(FnSig),
     Function(FnSig),
     Infer,
@@ -324,7 +326,7 @@ pub enum Type {
 
 impl Type {
     pub fn simple_path(name: &str) -> Node<Type> {
-        Node::new(Type::Path(Qualified::simple(name), vec![]))
+        Node::new(Type::Path(Qualified::one(name, vec![])))
     }
 }
 
@@ -341,8 +343,7 @@ pub enum Expr {
     Closure(FnSig, FnBody),
     New {
         const_: bool,
-        ty: Node<Type>,
-        ctor: Option<Symbol>,
+        path: Node<Qualified>,
         args: Args,
     },
     List {
@@ -413,16 +414,14 @@ pub struct Args {
 
 #[derive(Debug)]
 pub struct MetadataItem {
-    pub qualified: Qualified,
-    pub suffix: Option<Symbol>,
+    pub qualified: Node<Qualified>,
     pub arguments: Option<Args>,
 }
 
 impl MetadataItem {
     pub fn simple(name: &str) -> MetadataItem {
         MetadataItem {
-            qualified: Qualified::simple(name),
-            suffix: None,
+            qualified: Qualified::one(name, vec![]),
             arguments: None,
         }
     }

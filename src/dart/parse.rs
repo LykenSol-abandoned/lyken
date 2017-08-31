@@ -249,36 +249,6 @@ impl<'a> Parser<'a> {
         Ok(ident)
     }
 
-    fn dart_unreserved_ident(&mut self) -> ParseResult<Symbol> {
-        let ident = self.try(|p| {
-            let ident = p.parse_ident()?;
-            match &ident.as_str()[..] {
-                "abstract" |
-                "as" |
-                "deferred" |
-                "export" |
-                "external" |
-                "factory" |
-                "get" |
-                "implements" |
-                "import" |
-                "library" |
-                "operator" |
-                "part" |
-                "set" |
-                "static" |
-                "typedef" => expected!(p, Ident),
-                _ => {}
-            }
-            Ok(ident)
-        });
-        if let Some(ident) = ident {
-            Ok(ident)
-        } else {
-            expected!(self, Ident)
-        }
-    }
-
     pub fn parse_one_or_more<F: FnMut(&mut Self) -> ParseResult<T>, T>(
         &mut self,
         delim: char,
@@ -294,40 +264,30 @@ impl<'a> Parser<'a> {
         Ok(list)
     }
 
-    fn dart_qualified(&mut self) -> ParseResult<Qualified> {
-        let name = self.parse_ident()?;
-        if self.eat_punctuation('.') {
-            Ok(Qualified {
-                prefix: Some(name),
-                name: self.parse_ident()?,
-            })
-        } else {
-            Ok(Qualified { prefix: None, name })
+    fn dart_qualified(&mut self) -> ParseResult<Node<Qualified>> {
+        let mut prefix = None;
+        loop {
+            let name = self.parse_ident()?;
+            let params = if self.is_punctuation('<') {
+                self.dart_type_params()?
+            } else {
+                vec![]
+            };
+            let qualified = Node::new(Qualified {
+                prefix,
+                name,
+                params,
+            });
+
+            if !self.eat_punctuation('.') {
+                return Ok(qualified);
+            }
+            prefix = Some(qualified);
         }
     }
 
     pub fn dart_type(&mut self) -> ParseResult<Node<Type>> {
-        let name = self.dart_unreserved_ident()?;
-        let qualified = if let Some(second) = self.try(|p| {
-            p.expect_punctuation('.')?;
-            p.dart_unreserved_ident()
-        }) {
-            Qualified {
-                prefix: Some(name),
-                name: second,
-            }
-        } else {
-            Qualified {
-                prefix: None,
-                name: name,
-            }
-        };
-        let generics = if self.is_punctuation('<') {
-            self.dart_type_params()?
-        } else {
-            vec![]
-        };
-        let mut ty = Node::new(Type::Path(qualified, generics));
+        let mut ty = Node::new(Type::Path(self.dart_qualified()?));
         if self.eat_keyword("Function") {
             let sig = self.dart_fn_args(ty)?;
             ty = Node::new(Type::Function(sig));
@@ -380,16 +340,11 @@ impl<'a> Parser<'a> {
 
     fn dart_metadata(&mut self) -> ParseResult<Metadata> {
         let mut meta = vec![];
-        let mut meta_item;
         while self.eat_punctuation('@') {
-            meta_item = MetadataItem {
+            let mut meta_item = MetadataItem {
                 qualified: self.dart_qualified()?,
-                suffix: None,
                 arguments: None,
             };
-            if self.eat_punctuation('.') {
-                meta_item.suffix = Some(self.parse_ident()?);
-            }
             if self.is_punctuation('(') {
                 meta_item.arguments = Some(self.dart_arguments()?);
             }
@@ -798,19 +753,10 @@ impl<'a> Parser<'a> {
             return Ok(Node::new(Expr::Map { const_, kv_ty, kv }));
         }
         if const_ || self.eat_keyword("new") {
-            let ty = self.dart_type()?;
-            let ctor = if self.eat_punctuation('.') {
-                let name = self.parse_ident()?;
-                Some(name)
-            } else {
-                None
-            };
-            let args = self.dart_arguments()?;
             return Ok(Node::new(Expr::New {
                 const_,
-                ty,
-                ctor,
-                args,
+                path: self.dart_qualified()?,
+                args: self.dart_arguments()?,
             }));
         }
         if let Some(number) = self.try(|p| p.dart_number_literal()) {
@@ -1266,7 +1212,7 @@ impl<'a> Parser<'a> {
         let metadata = self.dart_metadata()?;
         let name = self.parse_ident()?;
         let extends = if self.eat_keyword("extends") {
-            Some(self.dart_type()?)
+            Some(self.dart_qualified()?)
         } else {
             None
         };
@@ -1395,7 +1341,12 @@ impl<'a> Parser<'a> {
     }
 
     fn dart_function(&mut self, requires_body: bool) -> ParseResult<Node<Function>> {
-        let (return_type, name) = self.try(|p| Ok((p.dart_type()?, p.dart_fn_name()?)))
+        let return_type_and_name = if self.is_keyword("get") || self.is_keyword("set") {
+            None
+        } else {
+            self.try(|p| Ok((p.dart_type()?, p.dart_fn_name()?)))
+        };
+        let (return_type, name) = return_type_and_name
             .ok_or(())
             .or_else(
                 |_| -> ParseResult<_> { Ok((Node::new(Type::Infer), self.dart_fn_name()?)) },
@@ -1616,9 +1567,9 @@ impl<'a> Parser<'a> {
                 self.expect_punctuation('>')?;
             }
             let (superclass, mixins) = if self.eat_keyword("extends") {
-                let superclass = Some(self.dart_type()?);
+                let superclass = Some(self.dart_qualified()?);
                 let mixins = if self.eat_keyword("with") {
-                    self.parse_one_or_more(',', |p| p.dart_type())?
+                    self.parse_one_or_more(',', |p| p.dart_qualified())?
                 } else {
                     vec![]
                 };
@@ -1627,7 +1578,7 @@ impl<'a> Parser<'a> {
                 (None, vec![])
             };
             let interfaces = if self.eat_keyword("implements") {
-                self.parse_one_or_more(',', |p| p.dart_type())?
+                self.parse_one_or_more(',', |p| p.dart_qualified())?
             } else {
                 vec![]
             };
@@ -1651,11 +1602,11 @@ impl<'a> Parser<'a> {
                 }));
             } else {
                 self.expect_punctuation('=')?;
-                let mut mixins = vec![self.dart_type()?];
+                let mut mixins = vec![self.dart_qualified()?];
                 self.expect_keyword("with")?;
-                mixins.extend(self.parse_one_or_more(',', |p| p.dart_type())?);
+                mixins.extend(self.parse_one_or_more(',', |p| p.dart_qualified())?);
                 let interfaces = if self.eat_keyword("implements") {
-                    self.parse_one_or_more(',', |p| p.dart_type())?
+                    self.parse_one_or_more(',', |p| p.dart_qualified())?
                 } else {
                     vec![]
                 };
