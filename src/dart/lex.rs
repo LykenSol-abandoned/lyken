@@ -112,6 +112,8 @@ pub struct Lexer {
     tokens: Vec<(Span, Token)>,
 }
 
+// FIXME replace Span fields with methods.
+#[allow(deprecated)]
 impl Lexer {
     pub fn new(span: Span) -> Self {
         assert!(span.lo <= span.hi);

@@ -117,18 +117,18 @@ impl Printer {
                 }
                 self.print_str(";");
             }
-            Item::Import(ref metadata, ref spec) => {
+            Item::Import(ref metadata, ref import) => {
                 self.dart_metadata(metadata);
                 self.print_str("import ");
-                self.dart_string_lit(&spec.uri);
-                if spec.deferred == true {
+                self.dart_string_lit(&import.uri);
+                if import.deferred == true {
                     self.print_str(" deferred ");
                 }
-                if let Some(ident) = spec.as_ident {
+                if let Some(ident) = import.alias {
                     self.print_str("as ");
                     self.print_ident(ident);
                 }
-                for filter in &spec.filters {
+                for filter in &import.filters {
                     self.dart_combinator(filter);
                 }
                 self.print_str(";");
@@ -425,9 +425,9 @@ impl Printer {
                     }
                     if let Some(ref catch) = part.catch {
                         self.print_str("catch ");
-                        self.print_ident(catch.exception);
-                        if let Some(trace) = catch.trace {
-                            self.print_ident(trace);
+                        self.print_ident(catch.exception.name);
+                        if let Some(ref trace) = catch.trace {
+                            self.print_ident(trace.name);
                         }
                     }
                     if part.catch.is_none() & part.on.is_none() {
@@ -981,9 +981,8 @@ impl Printer {
                 ref method_qualifiers,
                 name,
                 ref sig,
-                ref ty,
+                ref path,
             } => {
-
                 self.dart_metadata(metadata);
                 for qualifier in method_qualifiers {
                     self.dart_method_qualifier(qualifier);
@@ -997,11 +996,7 @@ impl Printer {
                 self.print_str(" ");
                 self.dart_fn_args(sig);
                 self.print_str(" = ");
-                self.dart_type(ty);
-                if let Some(name) = name {
-                    self.print_str(".");
-                    self.print_ident(name);
-                }
+                self.dart_qualified(path);
                 self.print_str(";");
             }
             ClassMember::Constructor {

@@ -104,6 +104,7 @@ impl Packages {
     }
 }
 
+// TODO return just the PathBuf to pass to Module::load.
 pub fn resolve_import(root_module: Node<Module>, uri: &str) -> Node<Module> {
     let mut uri_parts = uri.split('/');
     let mut path = if uri.starts_with("dart:") {
