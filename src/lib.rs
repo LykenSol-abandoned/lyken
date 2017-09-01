@@ -1,4 +1,4 @@
-#![feature(catch_expr, conservative_impl_trait, rustc_private)]
+#![feature(catch_expr, coerce_unsized, conservative_impl_trait, rustc_private, unsize)]
 
 #[macro_use]
 extern crate error_chain;
@@ -44,6 +44,8 @@ pub fn codemap() -> Rc<CodeMap> {
     CODEMAP.with(|c| c.clone())
 }
 
+// FIXME replace Span fields with methods.
+#[allow(deprecated)]
 pub fn mk_sp(lo: BytePos, hi: BytePos) -> Span {
     Span {
         lo,

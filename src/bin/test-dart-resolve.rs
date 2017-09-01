@@ -16,7 +16,7 @@ fn main() {
                     continue 'outer;
                 }
             }
-            resolve::resolve(module)
+            resolve::resolve(module, true)
         }
     }
 }

@@ -958,9 +958,15 @@ impl<'a> Parser<'a> {
 
     fn dart_catch_part(&mut self) -> ParseResult<CatchPart> {
         self.expect_punctuation('(')?;
-        let exception = self.parse_ident()?;
+        let exception = Node::new(VarDef {
+            name: self.parse_ident()?,
+            init: None,
+        });
         let trace = if self.eat_punctuation(',') {
-            Some(self.parse_ident()?)
+            Some(Node::new(VarDef {
+                name: self.parse_ident()?,
+                init: None,
+            }))
         } else {
             None
         };
@@ -1422,19 +1428,14 @@ impl<'a> Parser<'a> {
             };
             let sig = self.dart_fn_args(Node::new(Type::Infer))?;
             if !self.is_punctuation2('=', '>') && self.eat_punctuation('=') {
-                let ty = self.dart_type()?;
-                let name = if self.eat_punctuation('.') {
-                    Some(self.parse_ident()?)
-                } else {
-                    None
-                };
+                let path = self.dart_qualified()?;
                 self.expect_punctuation(';')?;
                 return Ok(Node::new(ClassMember::Redirect {
                     metadata,
                     method_qualifiers,
                     name,
                     sig,
-                    ty,
+                    path,
                 }));
             }
             let initializers = if self.eat_punctuation(':') {
@@ -1518,7 +1519,7 @@ impl<'a> Parser<'a> {
             } else {
                 false
             };
-            let as_ident = if self.eat_keyword("as") {
+            let alias = if self.eat_keyword("as") {
                 Some(self.parse_ident()?)
             } else {
                 None
@@ -1530,7 +1531,7 @@ impl<'a> Parser<'a> {
                 Import {
                     uri,
                     deferred,
-                    as_ident,
+                    alias,
                     filters,
                 },
             )));

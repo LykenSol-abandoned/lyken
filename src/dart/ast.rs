@@ -1,12 +1,33 @@
 use dart::parse;
+use dart::visit::{Visit, VisitNode, Visitor};
 use enum_primitive::FromPrimitive;
 use node::Node;
+use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter;
 use std::path::{Path, PathBuf};
 use syntax::symbol::Symbol;
 use syntax::codemap::Span;
+
+node_field!(parent_any: Node<Any>);
+
+impl<T: 'static> Node<T> {
+    pub fn parent<U: 'static>(&self) -> Option<Node<U>> {
+        if let Some(parent) = self.parent_any().get() {
+            parent.downcast()
+        } else {
+            None
+        }
+    }
+    pub fn root_module(&self) -> Node<Module> {
+        let mut node: Node<Any> = self.clone();
+        while let Some(parent) = node.parent_any().get() {
+            node = parent;
+        }
+        node.downcast().unwrap()
+    }
+}
 
 #[derive(Debug)]
 pub struct Module {
@@ -45,6 +66,25 @@ impl Module {
                 })
             }
         };
+
+        struct Parenter {
+            parent: Node<Any>,
+        }
+
+        impl Visitor for Parenter {
+            fn visit_node<T: VisitNode>(&mut self, node: Node<T>) {
+                let parent = self.parent.clone();
+                node.parent_any().set(parent.clone());
+                self.parent = node.clone();
+                node.walk(self);
+                self.parent = parent;
+            }
+        }
+
+        module.walk(&mut Parenter {
+            parent: module.clone(),
+        });
+
         CACHE.with(|c| {
             c.borrow_mut().insert(module.path.clone(), module.clone())
         });
@@ -112,7 +152,7 @@ pub struct ImportFilter {
 pub struct Import {
     pub uri: StringLiteral,
     pub deferred: bool,
-    pub as_ident: Option<Symbol>,
+    pub alias: Option<Symbol>,
     pub filters: Vec<ImportFilter>,
 }
 
@@ -131,7 +171,7 @@ pub enum ClassMember {
         method_qualifiers: Vec<MethodQualifiers>,
         name: Option<Symbol>,
         sig: FnSig,
-        ty: Node<Type>,
+        path: Node<Qualified>,
     },
     Constructor {
         metadata: Metadata,
@@ -543,8 +583,8 @@ pub struct SwitchCase {
 
 #[derive(Debug)]
 pub struct CatchPart {
-    pub exception: Symbol,
-    pub trace: Option<Symbol>,
+    pub exception: Node<VarDef>,
+    pub trace: Option<Node<VarDef>>,
 }
 
 #[derive(Debug)]
