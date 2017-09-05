@@ -8,6 +8,7 @@ use node::Node;
 use url::Url;
 
 pub const FLUTTER_PATH: &str = "flutter/";
+pub const ENGINE_PATH: &str = "flutter/bin/cache/pkg/sky_engine/lib/";
 pub const PATH: &str = "flutter/bin/cache/dart-sdk/";
 
 thread_local!(pub static PLATFORM: Platform = Platform::load());
@@ -40,6 +41,13 @@ impl Platform {
                 }
             }
         }
+        platform.libraries.insert(
+            String::from("ui"),
+            Path::new(ENGINE_PATH)
+                .join("ui/ui.dart")
+                .canonicalize()
+                .unwrap(),
+        );
         platform
     }
 }
@@ -97,15 +105,26 @@ impl Packages {
 }
 
 pub fn resolve_import(root_module: Node<Module>, uri: &str) -> Node<Module> {
-    if uri.starts_with("dart:") {
-        let lib = &uri["dart:".len()..];
-        PLATFORM.with(|p| Module::load(&p.libraries[lib]))
+    let mut uri_parts = uri.split('/');
+    let mut path = if uri.starts_with("dart:") {
+        let prefix = uri_parts.next().unwrap();
+        PLATFORM.with(|p| {
+            p.libraries
+                .get(&prefix["dart:".len()..])
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from(prefix))
+        })
     } else if uri.starts_with("package:") {
-        let mut uri_parts = uri["package:".len()..].splitn(2, '/');
-        let name = uri_parts.next().unwrap();
-        let path = uri_parts.next().unwrap();
-        FLUTTER_PACKAGES.with(|p| Module::load(&p.packages[name].join(path)))
+        let prefix = uri_parts.next().unwrap();
+        FLUTTER_PACKAGES.with(|p| {
+            p.packages
+                .get(&prefix["package:".len()..])
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from(prefix))
+        })
     } else {
-        Module::load(&root_module.path.parent().unwrap().join(uri))
-    }
+        root_module.path.parent().unwrap().to_path_buf()
+    };
+    path.extend(uri_parts);
+    Module::load(&path)
 }

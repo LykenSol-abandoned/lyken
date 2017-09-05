@@ -1555,10 +1555,12 @@ impl<'a> Parser<'a> {
             }
             let uri = self.dart_string_literal()?;
             self.expect_punctuation(';')?;
+            let mut path = self.path.parent().unwrap().to_path_buf();
+            path.extend(uri.get_simple_string().split('/'));
             return Ok(Node::new(Item::Part {
                 metadata,
-                module: Module::load(&self.path.parent().unwrap().join(uri.get_simple_string())),
                 uri,
+                module: Module::load(&path),
             }));
         }
 
