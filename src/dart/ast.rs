@@ -1,4 +1,4 @@
-use dart::parse::Parser;
+use dart::parse;
 use enum_primitive::FromPrimitive;
 use node::Node;
 use std::cell::RefCell;
@@ -20,14 +20,24 @@ impl Module {
         thread_local!(static CACHE: RefCell<HashMap<PathBuf, Node<Module>>> =
             RefCell::new(HashMap::new()));
 
-        let path = path.canonicalize().unwrap();
-        if let Some(module) = CACHE.with(|c| c.borrow().get(&path).cloned()) {
-            return module;
-        }
-        let module = match Parser::with_file(&path, |p| p.dart_module()) {
+        let path_buf;
+        let mut path = path;
+        let module = do catch {
+            path_buf = path.canonicalize()?;
+            path = &path_buf;
+            if let Some(module) = CACHE.with(|c| c.borrow().get(path).cloned()) {
+                return module;
+            }
+            parse::Parser::with_file(path, |p| p.dart_module())
+        };
+        let module = match module {
             Ok(module) => module,
             Err(error) => {
-                println!("{}", error);
+                if let parse::ErrorKind::Io(_) = *error.kind() {
+                    println!("{}: {}", path.display(), error);
+                } else {
+                    println!("{}", error);
+                }
                 Node::new(Module {
                     path: path.to_path_buf(),
                     items: vec![],
