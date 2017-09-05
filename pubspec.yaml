@@ -1,0 +1,5 @@
+name: lyken
+
+dependencies:
+  flutter:
+    sdk: flutter

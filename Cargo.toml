@@ -5,31 +5,21 @@ license = "MIT/Apache-2.0"
 name = "lyken"
 repository = "https://github.com/lykenware/lyken"
 version = "0.1.0"
-
-[lib]
-test = false
-doctest = false
-
 [[bin]]
 name = "reformat-dsl"
 test = false
-
 [[bin]]
 name = "test-dart-lex"
 test = false
-
 [[bin]]
 name = "test-dart-parse"
 test = false
-
 [[bin]]
 name = "test-dart-resolve"
 test = false
-
 [[bin]]
 name = "test-dsl-lift"
 test = false
-
 [[bin]]
 name = "test-dsl-lower"
 test = false
@@ -40,4 +30,9 @@ enum_primitive = "0.1.1"
 error-chain = "0.10.0"
 unicode-width = "0.1.4"
 unicode-xid = "0.1.0"
+url = "1.5.1"
 walkdir = "1.0.7"
+
+[lib]
+doctest = false
+test = false

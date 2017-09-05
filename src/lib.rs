@@ -1,12 +1,13 @@
-#![feature(conservative_impl_trait, rustc_private)]
+#![feature(catch_expr, conservative_impl_trait, rustc_private)]
 
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate enum_primitive;
+extern crate syntax;
 extern crate unicode_width;
 extern crate unicode_xid;
-extern crate syntax;
+extern crate url;
 
 use syntax::codemap::{BytePos, CodeMap, FilePathMapping, Span, NO_EXPANSION, SPAN_DEBUG};
 use std::rc::Rc;

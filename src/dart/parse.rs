@@ -28,6 +28,10 @@ error_chain! {
         Lex(lex::Error, lex::ErrorKind);
     }
 
+    foreign_links {
+        Io(::std::io::Error);
+    }
+
     errors {
         ExpectedAt {
             expected: Expected,
@@ -65,7 +69,8 @@ impl<'a> Parser<'a> {
         let codemap = ::codemap();
         let file = codemap
             .get_filemap(path.to_str().unwrap())
-            .unwrap_or_else(|| codemap.load_file(path).unwrap());
+            .ok_or(())
+            .or_else(|_| codemap.load_file(path))?;
         let tokens = Lexer::new(::mk_sp(file.start_pos, file.end_pos))
             .tokenize()?;
         let mut parser = Parser {
@@ -1750,10 +1755,16 @@ impl<'a> Parser<'a> {
         while !self.out_of_tokens() {
             items.push(self.dart_item()?);
         }
+        let mut has_error = false;
+        for item in &items {
+            if let Item::Part { ref module, .. } = **item {
+                has_error |= module.has_error;
+            }
+        }
         Ok(Node::new(Module {
             path: self.path,
             items,
-            has_error: false,
+            has_error,
         }))
     }
 }

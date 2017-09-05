@@ -1,7 +1,7 @@
 use dart::ast::{ClassMember, Expr, FnName, ForLoop, Function, Import, ImportFilter, Item, Module,
                 Qualified, Statement, TypeParameter, VarDef};
 use dart::visit::{self, Visit, Visitor};
-use dart::sdk::PLATFORM;
+use dart::sdk;
 use node::Node;
 use std::collections::HashMap;
 use syntax::symbol::Symbol;
@@ -114,18 +114,7 @@ impl Collector {
         self.add_import(&import.uri.get_simple_string(), &import.filters);
     }
     fn add_import(&mut self, uri: &str, _filters: &[ImportFilter]) {
-        let module = if uri.starts_with("dart:") {
-            let lib = &uri["dart:".len()..];
-            PLATFORM.with(|p| Module::load(&p.libraries[lib]))
-        } else {
-            Module::load(&self.root_module
-                .as_ref()
-                .unwrap()
-                .path
-                .parent()
-                .unwrap()
-                .join(uri))
-        };
+        let module = sdk::resolve_import(self.root_module.clone().unwrap(), uri);
         module.visit(self);
     }
 
