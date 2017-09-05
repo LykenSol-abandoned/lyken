@@ -115,7 +115,12 @@ impl Collector {
     }
     fn add_import(&mut self, uri: &str, _filters: &[ImportFilter]) {
         let module = sdk::resolve_import(self.root_module.clone().unwrap(), uri);
-        module.visit(self);
+        let mut import_collector = Collector {
+            map: HashMap::new(),
+            root_module: Some(module.clone())
+        };
+        module.visit(&mut import_collector);
+        self.map.extend(import_collector.map);
     }
 
     fn lookup_qualified(&mut self, qualified: &Qualified) -> Option<Res> {
@@ -174,6 +179,9 @@ impl Visitor for Collector {
             },
             Item::Part { ref module, .. } => {
                 module.visit(self);
+            }
+            Item::Export(_, ref uri, ref filters) => {
+                self.add_import(&uri.get_simple_string(), filters);
             }
             _ => {}
         }
