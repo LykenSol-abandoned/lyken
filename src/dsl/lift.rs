@@ -1,32 +1,153 @@
 use dsl::ast;
 use dart::ast::*;
+use dart::sdk;
+use dart::resolve::Res;
 use node::Node;
+use std::collections::HashMap;
+use std::mem;
+use std::path::Path;
+use syntax::symbol::Symbol;
 
-pub struct Lifter {}
+pub struct Lifter {
+    stateless_widget_class: Res,
+    stateful_widget_class: Res,
+    state_class: Res,
+    classes: HashMap<Node<Item>, Class>,
+}
 
-#[derive(Copy, Clone)]
-enum Strategy {
+struct Class {
+    name: Symbol,
+    kind: ClassKind,
+    fields: Vec<ast::FieldDef>,
+    dart_members: Vec<Node<ClassMember>>,
+    build_return: Option<ast::Expr>,
+}
+
+#[derive(Clone)]
+enum ClassKind {
     Plain,
+    Remove,
     StatelessWidget,
+    StatefulWidget,
+    State { widget_class: Node<Item> },
 }
 
 impl Lifter {
     pub fn new() -> Self {
-        Lifter {}
+        let mut stateless_widget_class = None;
+        let mut stateful_widget_class = None;
+        let mut state_class = None;
+        let module =
+            sdk::resolve_import(Path::new(""), "package:flutter/src/widgets/framework.dart");
+        for item in &module.items {
+            if let Item::Class { name, .. } = **item {
+                if name == "StatelessWidget" {
+                    stateless_widget_class = Some(Res::Class(item.clone()));
+                }
+                if name == "StatefulWidget" {
+                    stateful_widget_class = Some(Res::Class(item.clone()));
+                }
+                if name == "State" {
+                    state_class = Some(Res::Class(item.clone()));
+                }
+            }
+        }
+        Lifter {
+            stateless_widget_class: stateless_widget_class.unwrap(),
+            stateful_widget_class: stateful_widget_class.unwrap(),
+            state_class: state_class.unwrap(),
+            classes: HashMap::new(),
+        }
     }
 
     pub fn lift_items(&mut self, items: &[Node<Item>]) -> Vec<ast::Item> {
+        for item in items {
+            self.collect_item(item.clone());
+        }
+        let mut state_classes = vec![];
+        for (item, class) in &self.classes {
+            if let ClassKind::State { ref widget_class } = class.kind {
+                if let Some(widget_class) = self.classes.get(widget_class) {
+                    if let ClassKind::StatefulWidget = widget_class.kind {
+                        state_classes.push(item.clone());
+                    }
+                }
+            }
+        }
+
+        for item in state_classes {
+            let (kind, fields, dart_members, build_return);
+            {
+                let class = self.classes.get_mut(&item).unwrap();
+                kind = mem::replace(&mut class.kind, ClassKind::Remove);
+                fields = mem::replace(&mut class.fields, vec![]);
+                dart_members = mem::replace(&mut class.dart_members, vec![]);
+                build_return = class.build_return.take();
+            }
+            if let ClassKind::State { ref widget_class } = kind {
+                let widget_class = self.classes.get_mut(widget_class).unwrap();
+                widget_class.fields.extend(fields);
+                widget_class.dart_members.extend(dart_members);
+                widget_class.build_return = build_return;
+            }
+        }
+
+        let mut replacements: HashMap<_, _> = self.classes
+            .drain()
+            .filter_map(
+                |(
+                    item,
+                    Class {
+                        name,
+                        kind,
+                        fields,
+                        dart_members,
+                        build_return,
+                    },
+                )| {
+                    if let ClassKind::Remove = kind {
+                        return Some((item, vec![]));
+                    }
+                    Some((
+                        item,
+                        vec![
+                            ast::Item::ComponentDef {
+                                name,
+                                fields,
+                                dart_members,
+                                body: match (build_return, kind) {
+                                    (None, ClassKind::Plain) => None,
+                                    (Some(build_return), ClassKind::StatelessWidget) |
+                                    (Some(build_return), ClassKind::StatefulWidget) => {
+                                        Some(build_return)
+                                    }
+
+                                    _ => return None,
+                                },
+                            },
+                        ],
+                    ))
+                },
+            )
+            .collect();
+
         items
             .iter()
-            .map(|item| self.lift_item(item.clone()))
+            .flat_map(|item| {
+                if let Some(replacement) = replacements.remove(item) {
+                    replacement
+                } else {
+                    vec![ast::Item::Dart(item.clone())]
+                }
+            })
             .collect()
     }
 
-    fn lift_item(&mut self, item: Node<Item>) -> ast::Item {
+    fn collect_item(&mut self, item: Node<Item>) {
         macro_rules! require {
             ($($c:expr),+) => {
                 if !($($c)&&+) {
-                    return ast::Item::Dart(item);
+                    return;
                 }
             };
         }
@@ -47,21 +168,52 @@ impl Lifter {
                     mixins.is_empty(),
                     interfaces.is_empty()
                 ];
-                let strategy = match *superclass {
+                let kind = match *superclass {
                     Some(ref superclass) => {
-                        require![
-                            superclass.params.is_empty(),
-                            superclass.prefix.is_none(),
-                            superclass.name == "StatelessWidget"
-                        ];
-                        Strategy::StatelessWidget
+                        let class_kind = superclass.res().get().unwrap();
+                        if class_kind == self.stateless_widget_class {
+                            ClassKind::StatelessWidget
+                        } else if class_kind == self.stateful_widget_class {
+                            ClassKind::StatefulWidget
+                        } else if class_kind == self.state_class {
+                            let qualified = match *superclass.params[0] {
+                                Type::Path(ref qualified) => qualified,
+                                _ => return,
+                            };
+                            ClassKind::State {
+                                widget_class: match qualified.res().get().unwrap() {
+                                    Res::Class(item) => item,
+                                    _ => return,
+                                },
+                            }
+                        } else {
+                            return;
+                        }
                     }
-                    None => Strategy::Plain,
+                    None => ClassKind::Plain,
                 };
-                let mut fields = vec![];
-                let mut dart_members = vec![];
-                let mut build_return = None;
-                for member in members {
+                let mut class = Class {
+                    name,
+                    kind,
+                    fields: vec![],
+                    dart_members: vec![],
+                    build_return: None,
+                };
+                let mut pub_fields = 0;
+                let mut failed = false;
+                let mut dart_members = members.clone();
+                dart_members.retain(|member| {
+                    macro_rules! require {
+                        ($($c:expr),+) => {
+                            if !($($c)&&+) {
+                                failed = true;
+                                return false;
+                            }
+                        };
+                    }
+                    if failed {
+                        return false;
+                    }
                     match *member.clone() {
                         ClassMember::Fields {
                             ref metadata,
@@ -71,7 +223,7 @@ impl Lifter {
                         } => {
                             require![
                                 metadata.is_empty(),
-                                var_type.fcv == FinalConstVar::Final,
+                                var_type.fcv != FinalConstVar::Const,
                                 initializers.len() >= 1
                             ];
                             let ty = match *var_type.ty {
@@ -82,24 +234,43 @@ impl Lifter {
                             if let Some(ref init) = initializers[0].init {
                                 default = Some(self.lift_expr(init.clone()));
                             }
-                            fields.push(ast::FieldDef {
-                                mutable: false,
+                            if !initializers[0].name.as_str().starts_with('_') {
+                                pub_fields += 1;
+                            }
+                            class.fields.push(ast::FieldDef {
+                                mutable: var_type.fcv == FinalConstVar::Var,
                                 name: initializers[0].name,
                                 ty,
                                 default,
                             });
+                            false
                         }
-                        _ => {}
+                        _ => true,
                     }
+                });
+
+                if failed {
+                    return;
                 }
-                for member in members {
+
+                dart_members.retain(|member| {
+                    macro_rules! require {
+                        ($($c:expr),+) => {
+                            if !($($c)&&+) {
+                                failed = true;
+                                return false;
+                            }
+                        };
+                    }
+                    if failed {
+                        return false;
+                    }
                     match *member.clone() {
                         ClassMember::Method(ref meta, ref qualif, ref function) => {
                             match function.name {
                                 FnName::Regular(name) if name == "build" => {}
                                 _ => {
-                                    dart_members.push(member.clone());
-                                    continue;
+                                    return true;
                                 }
                             }
                             require![
@@ -114,7 +285,7 @@ impl Lifter {
                                         Statement::Block(ref stm) => {
                                             stm.len() == 1 && match *stm[0] {
                                                 Statement::Return(Some(ref expr)) => {
-                                                    build_return =
+                                                    class.build_return =
                                                         Some(self.lift_expr(expr.clone()));
                                                     true
                                                 }
@@ -126,6 +297,7 @@ impl Lifter {
                                     _ => false,
                                 }
                             ];
+                            true
                         }
                         ClassMember::Constructor {
                             ref metadata,
@@ -146,8 +318,8 @@ impl Lifter {
                                 sig.optional_kind == OptionalArgKind::Named,
                                 !sig.async,
                                 !sig.generator,
-                                match strategy {
-                                    Strategy::StatelessWidget => {
+                                match class.kind {
+                                    ClassKind::StatelessWidget | ClassKind::StatefulWidget => {
                                         initializers.len() == 1 && match initializers[0] {
                                             ConstructorInitializer::Super(ident, ref args) => {
                                                 ident.is_none() && args.unnamed.is_empty() &&
@@ -161,12 +333,13 @@ impl Lifter {
                                             _ => false,
                                         }
                                     }
-                                    Strategy::Plain => initializers.is_empty(),
+                                    ClassKind::Plain => initializers.is_empty(),
+                                    ClassKind::State { .. } | ClassKind::Remove => false,
                                 },
                                 sig.required.is_empty(),
-                                match strategy {
-                                    Strategy::StatelessWidget => {
-                                        sig.optional.len() == fields.len() + 1 &&
+                                match class.kind {
+                                    ClassKind::StatelessWidget => {
+                                        sig.optional.len() == pub_fields + 1 &&
                                             sig.optional[0].metadata.is_empty() &&
                                             !sig.optional[0].covariant &&
                                             !sig.optional[0].field &&
@@ -180,13 +353,16 @@ impl Lifter {
                                                 _ => false,
                                             }
                                     }
-                                    Strategy::Plain => sig.optional.len() == fields.len(),
+                                    ClassKind::Plain => sig.optional.len() == pub_fields,
+                                    ClassKind::StatefulWidget |
+                                    ClassKind::State { .. } |
+                                    ClassKind::Remove => false,
                                 }
                             ];
 
                             for (i, arg) in sig.optional.iter().enumerate() {
-                                match strategy {
-                                    Strategy::StatelessWidget if i == 0 => {
+                                match class.kind {
+                                    ClassKind::StatelessWidget if i == 0 => {
                                         continue;
                                     }
                                     _ => {}
@@ -195,6 +371,7 @@ impl Lifter {
                                     arg.metadata.is_empty(),
                                     !arg.covariant,
                                     arg.field,
+                                    !arg.var.name.as_str().starts_with('_'),
                                     arg.ty.fcv == FinalConstVar::Var,
                                     match *arg.ty.ty {
                                         Type::Infer => true,
@@ -205,26 +382,25 @@ impl Lifter {
                                 if let Some(ref expr) = arg.var.init {
                                     default = Some(self.lift_expr(expr.clone()));
                                 }
-                                for field in &mut fields {
+                                for field in &mut class.fields {
                                     if field.name == arg.var.name {
                                         field.default = default;
                                         break;
                                     }
                                 }
                             }
+                            false
                         }
-                        ClassMember::Fields { .. } => {}
-                        _ => dart_members.push(member.clone()),
+                        _ => true,
                     }
+                });
+                if failed {
+                    return;
                 }
-                ast::Item::ComponentDef {
-                    name,
-                    fields,
-                    dart_members,
-                    body: build_return,
-                }
+                class.dart_members = dart_members;
+                self.classes.insert(item, class);
             }
-            _ => ast::Item::Dart(item),
+            _ => {}
         }
     }
 

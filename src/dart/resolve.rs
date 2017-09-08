@@ -9,7 +9,7 @@ use std::rc::Rc;
 use syntax::symbol::Symbol;
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Res {
     // Types.
     Void,
@@ -195,7 +195,7 @@ impl Collector {
         filters: &[ImportFilter],
         alias: Option<Symbol>,
     ) {
-        let module = sdk::resolve_import(root_module, uri);
+        let module = sdk::resolve_import(root_module.path.parent().unwrap(), uri);
         if module.has_error {
             self.has_error = true;
         }
