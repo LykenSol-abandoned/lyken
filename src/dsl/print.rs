@@ -25,10 +25,12 @@ impl Printer {
                 self.enter();
                 for field in fields {
                     self.dsl_field_def(field);
-                    self.print_str(", ");
+                    self.print_str(",");
+                    self.new_line();
                 }
                 for dart_member in dart_members {
                     self.dart_class_member(dart_member, name);
+                    self.new_line();
                 }
                 if let Some(ref body) = *body {
                     self.print_str("..");
