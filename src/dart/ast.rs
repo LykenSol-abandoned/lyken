@@ -39,7 +39,7 @@ pub struct Module {
 impl Module {
     pub fn load(path: &Path) -> Node<Module> {
         thread_local!(static CACHE: RefCell<HashMap<PathBuf, Node<Module>>> =
-            RefCell::new(HashMap::new()));
+        RefCell::new(HashMap::new()));
 
         let path_buf;
         let mut path = path;
@@ -207,6 +207,12 @@ pub enum FnName {
     Operator(OverloadedOp),
 }
 
+impl FnName {
+    pub fn regular<S: Into<Symbol>>(name: S) -> Self {
+        FnName::Regular(name.into())
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum OverloadedOp {
     BitNot,
@@ -239,10 +245,10 @@ pub struct Qualified {
 }
 
 impl Qualified {
-    pub fn one(name: &str, params: Vec<Node<Type>>) -> Node<Qualified> {
+    pub fn one<S: Into<Symbol>>(name: S, params: Vec<Node<Type>>) -> Node<Qualified> {
         Node::new(Qualified {
             prefix: None,
-            name: Symbol::intern(name),
+            name: name.into(),
             params,
         })
     }
@@ -375,7 +381,7 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn simple_path(name: &str) -> Node<Type> {
+    pub fn simple_path<S: Into<Symbol>>(name: S) -> Node<Type> {
         Node::new(Type::Path(Qualified::one(name, vec![])))
     }
 }
@@ -469,7 +475,7 @@ pub struct MetadataItem {
 }
 
 impl MetadataItem {
-    pub fn simple(name: &str) -> MetadataItem {
+    pub fn simple<S: Into<Symbol>>(name: S) -> MetadataItem {
         MetadataItem {
             qualified: Qualified::one(name, vec![]),
             arguments: None,
@@ -531,7 +537,7 @@ pub struct ArgDef {
 }
 
 impl ArgDef {
-    pub fn simple(ty: Node<Type>, name: &str) -> ArgDef {
+    pub fn simple<S: Into<Symbol>>(ty: Node<Type>, name: S) -> ArgDef {
         ArgDef {
             metadata: vec![],
             covariant: false,
@@ -541,7 +547,7 @@ impl ArgDef {
             },
             field: false,
             var: Node::new(VarDef {
-                name: Symbol::intern(name),
+                name: name.into(),
                 init: None,
             }),
         }

@@ -155,11 +155,11 @@ pub fn resolve(module: Node<Module>, fully_resolve: bool) {
     if core_prelude {
         collector.import(module.clone(), "dart:core", &[], None);
     }
-    collector.record(Symbol::intern("void"), Res::Void);
-    collector.record(Symbol::intern("dynamic"), Res::Dynamic);
-    collector.record(Symbol::intern("null"), Res::Null);
-    collector.record(Symbol::intern("false"), Res::False);
-    collector.record(Symbol::intern("true"), Res::True);
+    collector.record("void", Res::Void);
+    collector.record("dynamic", Res::Dynamic);
+    collector.record("null", Res::Null);
+    collector.record("false", Res::False);
+    collector.record("true", Res::True);
 
     module.walk(collector);
 
@@ -184,8 +184,8 @@ impl Collector {
         Rc::make_mut(&mut self.scope)
     }
 
-    fn record(&mut self, name: Symbol, res: Res) {
-        self.scope_mut().map.insert(name, res);
+    fn record<S: Into<Symbol>>(&mut self, name: S, res: Res) {
+        self.scope_mut().map.insert(name.into(), res);
     }
 
     fn import(
@@ -350,10 +350,9 @@ impl<'a> Visitor for Resolver<'a> {
                 ..
             } = *item
             {
-                this.collector.record(Symbol::intern("this"), Res::This);
-                this.collector.record(Symbol::intern("super"), Res::Super);
-                this.collector
-                    .record(Symbol::intern("runtimeType"), Res::RuntimeType);
+                this.collector.record("this", Res::This);
+                this.collector.record("super", Res::Super);
+                this.collector.record("runtimeType", Res::RuntimeType);
 
                 for class in superclass.iter().chain(mixins).chain(interfaces) {
                     class.visit(&mut TopLevelResolver {

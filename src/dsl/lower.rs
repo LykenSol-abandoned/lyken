@@ -52,10 +52,9 @@ impl Lowerer {
                             .map(|field| self.lower_field_def(field)),
                     );
                     let mut class_members = vec![];
-                    class_members.extend(self.lower_constructor(
-                        strategy,
-                        fields.iter().filter(|f| !f.mutable),
-                    ));
+                    class_members.extend(
+                        self.lower_constructor(strategy, fields.iter().filter(|f| !f.mutable)),
+                    );
 
                     class_members.extend(
                         fields
@@ -68,10 +67,10 @@ impl Lowerer {
                         vec![ast::MetadataItem::simple("override")],
                         vec![],
                         Node::new(ast::Function {
-                            name: ast::FnName::Regular(Symbol::intern("createState")),
+                            name: ast::FnName::regular("createState"),
                             generics: vec![],
                             sig: ast::FnSig {
-                                return_type: ast::Type::simple_path(&state_name),
+                                return_type: ast::Type::simple_path(&state_name[..]),
                                 required: vec![],
                                 optional: vec![],
                                 optional_kind: ast::OptionalArgKind::Named,
@@ -80,7 +79,7 @@ impl Lowerer {
                             },
                             body: Some(ast::FnBody::Arrow(Node::new(ast::Expr::New {
                                 const_: false,
-                                path: ast::Qualified::one(&state_name, vec![]),
+                                path: ast::Qualified::one(&state_name[..], vec![]),
                                 args: ast::Args {
                                     unnamed: vec![],
                                     named: vec![],
@@ -99,7 +98,6 @@ impl Lowerer {
                         interfaces: vec![],
                         members: class_members,
                     }));
-
                 } else {
                     class_members.extend(self.lower_constructor(strategy, fields));
                     class_members.extend(fields.iter().map(|field| self.lower_field_def(field)));
@@ -112,7 +110,7 @@ impl Lowerer {
                         vec![ast::MetadataItem::simple("override")],
                         vec![],
                         Node::new(ast::Function {
-                            name: ast::FnName::Regular(Symbol::intern("build")),
+                            name: ast::FnName::regular("build"),
                             generics: vec![],
                             sig: ast::FnSig {
                                 return_type: ast::Type::simple_path("Widget"),
@@ -140,13 +138,7 @@ impl Lowerer {
                     }
                     Strategy::StatefulWidget => Some(ast::Qualified::one(
                         "State",
-                        vec![
-                            Node::new(ast::Type::Path(Node::new(ast::Qualified {
-                                prefix: None,
-                                name,
-                                params: vec![],
-                            }))),
-                        ],
+                        vec![ast::Type::simple_path(name)],
                     )),
                     Strategy::Plain => None,
                 };
@@ -295,11 +287,7 @@ impl Lowerer {
                 let named = fields.iter().map(|field| self.lower_field(field)).collect();
                 Node::new(ast::Expr::New {
                     const_: false,
-                    path: Node::new(ast::Qualified {
-                        prefix: None,
-                        name,
-                        params: vec![],
-                    }),
+                    path: ast::Qualified::one(name, vec![]),
                     args: ast::Args { unnamed, named },
                 })
             }
@@ -313,7 +301,6 @@ impl Lowerer {
             }
             Expr::Dart(ref dart) => dart.clone(),
         }
-
     }
 
     fn lower_type(&mut self, ty: &Type) -> Node<ast::Type> {
