@@ -133,13 +133,13 @@ impl Lifter {
 
         items
             .iter()
-            .flat_map(|item| {
-                if let Some(replacement) = replacements.remove(item) {
+            .flat_map(
+                |item| if let Some(replacement) = replacements.remove(item) {
                     replacement
                 } else {
                     vec![ast::Item::Dart(item.clone())]
-                }
-            })
+                },
+            )
             .collect()
     }
 
@@ -211,9 +211,7 @@ impl Lifter {
                             }
                         };
                     }
-                    if failed {
-                        return false;
-                    }
+                    require![!failed];
                     match *member.clone() {
                         ClassMember::Fields {
                             ref metadata,
@@ -249,9 +247,7 @@ impl Lifter {
                     }
                 });
 
-                if failed {
-                    return;
-                }
+                require![!failed];
 
                 dart_members.retain(|member| {
                     macro_rules! require {
@@ -266,39 +262,6 @@ impl Lifter {
                         return false;
                     }
                     match *member.clone() {
-                        ClassMember::Method(ref meta, ref qualif, ref function) => {
-                            match function.name {
-                                FnName::Regular(name) if name == "build" => {}
-                                _ => {
-                                    return true;
-                                }
-                            }
-                            require![
-                                meta.len() == 1,
-                                meta[0].qualified.prefix.is_none(),
-                                meta[0].qualified.name == "override",
-                                meta[0].arguments.is_none(),
-                                qualif.is_empty(),
-                                function.generics.is_empty(),
-                                match function.body {
-                                    Some(FnBody::Block(ref stm)) => match **stm {
-                                        Statement::Block(ref stm) => {
-                                            stm.len() == 1 && match *stm[0] {
-                                                Statement::Return(Some(ref expr)) => {
-                                                    class.build_return =
-                                                        Some(self.lift_expr(expr.clone()));
-                                                    true
-                                                }
-                                                _ => false,
-                                            }
-                                        }
-                                        _ => false,
-                                    },
-                                    _ => false,
-                                }
-                            ];
-                            true
-                        }
                         ClassMember::Constructor {
                             ref metadata,
                             ref method_qualifiers,
@@ -394,15 +357,71 @@ impl Lifter {
                         _ => true,
                     }
                 });
-                if failed {
-                    return;
+                require![!failed];
+
+                dart_members.retain(|member| {
+                    macro_rules! require {
+                        ($($c:expr),+) => {
+                            if !($($c)&&+) {
+                                failed = true;
+                                return false;
+                            }
+                        };
+                    }
+                    require![!failed];
+                    match *member.clone() {
+                        ClassMember::Method(ref meta, ref qualif, ref function) => {
+                            match function.name {
+                                FnName::Regular(name) if name == "build" => {}
+                                FnName::Regular(name) if name == "createState" => {
+                                    return false;
+                                }
+                                _ => {
+                                    return true;
+                                }
+                            }
+                            require![
+                                meta.len() == 1,
+                                meta[0].qualified.prefix.is_none(),
+                                meta[0].qualified.name == "override",
+                                meta[0].arguments.is_none(),
+                                qualif.is_empty(),
+                                function.generics.is_empty(),
+                                match function.body {
+                                    Some(FnBody::Block(ref stm)) => match **stm {
+                                        Statement::Block(ref stm) => {
+                                            stm.len() == 1 && match *stm[0] {
+                                                Statement::Return(Some(ref expr)) => {
+                                                    class.build_return =
+                                                        Some(self.lift_expr(expr.clone()));
+                                                    true
+                                                }
+                                                _ => false,
+                                            }
+                                        }
+                                        _ => false,
+                                    },
+                                    _ => false,
+                                }
+                            ];
+                            true
+                        }
+                        _ => true,
+                    }
+                });
+                require![!failed];
+
+                if let ClassKind::StatefulWidget = class.kind {
+                    require![dart_members.is_empty()];
                 }
+
                 class.dart_members = dart_members;
                 self.classes.insert(item, class);
             }
             _ => {}
         }
     }
+
 
     fn lift_expr(&mut self, expr: Node<Expr>) -> ast::Expr {
         match *expr.clone() {
