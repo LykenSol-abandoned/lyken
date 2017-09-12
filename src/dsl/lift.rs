@@ -253,7 +253,7 @@ impl Lifter {
                         } => {
                             require![
                                 metadata.is_empty(),
-                                var_type.fcv != FinalConstVar::Const,
+                                var_type.fcv != Some(FinalConstVar::Const),
                                 initializers.len() >= 1
                             ];
                             let ty = match *var_type.ty {
@@ -268,7 +268,7 @@ impl Lifter {
                                 pub_fields += 1;
                             }
                             class.fields.push(ast::FieldDef {
-                                mutable: var_type.fcv == FinalConstVar::Var,
+                                mutable: var_type.fcv != Some(FinalConstVar::Final),
                                 name: initializers[0].name,
                                 ty,
                                 default,
@@ -375,7 +375,7 @@ impl Lifter {
                                     !arg.covariant,
                                     arg.field,
                                     !arg.var.name.as_str().starts_with('_'),
-                                    arg.ty.fcv == FinalConstVar::Var,
+                                    arg.ty.fcv.is_none(),
                                     match *arg.ty.ty {
                                         Type::Infer => true,
                                         _ => false,

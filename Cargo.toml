@@ -15,6 +15,9 @@ test = false
 name = "test-dart-parse"
 test = false
 [[bin]]
+name = "test-dart-print"
+test = false
+[[bin]]
 name = "test-dart-resolve"
 test = false
 [[bin]]

@@ -175,10 +175,16 @@ impl VisitNode for Item {
                 generics.visit(visitor);
                 ty.visit(visitor);
             }
-            Item::Function(ref function) => {
+            Item::Function {
+                ref metadata,
+                ref function,
+                ..
+            } => {
+                metadata.visit(visitor);
                 function.visit(visitor);
             }
-            Item::Vars(ref var_type, ref vars) => {
+            Item::Vars(ref metadata, ref var_type, ref vars) => {
+                metadata.visit(visitor);
                 var_type.ty.visit(visitor);
                 for var in vars {
                     var.visit(visitor);
@@ -358,11 +364,10 @@ impl Visit for FnBody {
             FnBody::Block(ref statement) => {
                 statement.visit(visitor);
             }
-            FnBody::Native(ref string_literal) => {
-                if let Some(ref string_literal) = *string_literal {
-                    string_literal.visit(visitor);
-                }
-            }
+            FnBody::Native(ref string_literal) => if let Some(ref string_literal) = *string_literal
+            {
+                string_literal.visit(visitor);
+            },
         }
     }
 }
