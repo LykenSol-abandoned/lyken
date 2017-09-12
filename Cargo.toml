@@ -23,6 +23,9 @@ test = false
 [[bin]]
 name = "test-dsl-lower"
 test = false
+[[bin]]
+name="test-dsl-resolve"
+test=false
 
 [dependencies]
 difference = "1.0.0"

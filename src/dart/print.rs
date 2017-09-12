@@ -797,7 +797,7 @@ impl Printer {
         }
     }
 
-    fn dart_qualified(&mut self, qualified: &Qualified) {
+    pub fn dart_qualified(&mut self, qualified: &Qualified) {
         if let Some(ref prefix) = qualified.prefix {
             self.dart_qualified(prefix);
             self.print_str(".");

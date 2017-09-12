@@ -5,7 +5,6 @@ use dart::resolve::Res;
 use node::Node;
 use std::collections::HashMap;
 use std::mem;
-use std::path::Path;
 use syntax::symbol::Symbol;
 
 pub struct Lifter {
@@ -32,7 +31,7 @@ struct Class {
 }
 
 impl Class {
-    fn lift_build_return(&mut self, lifter: &mut Lifter) -> Option<ast::Expr> {
+    fn lift_build_return(&mut self, lifter: &mut Lifter) -> Option<Node<ast::Expr>> {
         let mut build_return = None;
         self.dart_members.retain(|member| {
             macro_rules! require {
@@ -82,8 +81,9 @@ impl Lifter {
         let mut stateless_widget_class = None;
         let mut stateful_widget_class = None;
         let mut state_class = None;
-        let module =
-            sdk::resolve_import(Path::new(""), "package:flutter/src/widgets/framework.dart");
+        let module = Module::load(&sdk::resolve_import(
+            "package:flutter/src/widgets/framework.dart",
+        ));
         for item in &module.items {
             if let Item::Class { name, .. } = **item {
                 if name == "StatelessWidget" {
@@ -105,7 +105,7 @@ impl Lifter {
         }
     }
 
-    pub fn lift_items(&mut self, items: &[Node<Item>]) -> Vec<ast::Item> {
+    pub fn lift_items(&mut self, items: &[Node<Item>]) -> Vec<Node<ast::Item>> {
         for item in items {
             self.collect_item(item.clone());
         }
@@ -153,12 +153,12 @@ impl Lifter {
                 Some((
                     item,
                     vec![
-                        ast::Item::ComponentDef {
+                        Node::new(ast::Item::ComponentDef {
                             name: class.name,
-                            fields: class.fields,
+                            fields: class.fields.into_iter().map(Node::new).collect(),
                             dart_members: class.dart_members,
                             body,
-                        },
+                        }),
                     ],
                 ))
             })
@@ -170,7 +170,7 @@ impl Lifter {
                 |item| if let Some(replacement) = replacements.remove(item) {
                     replacement
                 } else {
-                    vec![ast::Item::Dart(item.clone())]
+                    vec![Node::new(ast::Item::Dart(item.clone()))]
                 },
             )
             .collect()
@@ -258,7 +258,7 @@ impl Lifter {
                             ];
                             let ty = match *var_type.ty {
                                 Type::Infer => None,
-                                _ => Some(ast::Type::Dart(var_type.ty.clone())),
+                                _ => Some(Node::new(ast::Type::Dart(var_type.ty.clone()))),
                             };
                             let mut default = None;
                             if let Some(ref init) = initializers[0].init {
@@ -411,7 +411,7 @@ impl Lifter {
     }
 
 
-    fn lift_expr(&mut self, expr: Node<Expr>) -> ast::Expr {
+    fn lift_expr(&mut self, expr: Node<Expr>) -> Node<ast::Expr> {
         match *expr.clone() {
             Expr::List {
                 const_: _,
@@ -422,7 +422,7 @@ impl Lifter {
                 for element in elements {
                     exprs.push(self.lift_expr(element.clone()));
                 }
-                ast::Expr::Array(exprs)
+                Node::new(ast::Expr::Array(exprs))
             }
             Expr::New {
                 const_: _,
@@ -430,10 +430,10 @@ impl Lifter {
                 ref args,
             } => {
                 if path.prefix.is_some() {
-                    return ast::Expr::Dart(expr);
+                    return Node::new(ast::Expr::Dart(expr));
                 }
                 if !path.params.is_empty() {
-                    return ast::Expr::Dart(expr);
+                    return Node::new(ast::Expr::Dart(expr));
                 }
                 let mut fields = vec![];
                 let mut unnamed = vec![];
@@ -445,13 +445,13 @@ impl Lifter {
                 for arg in &args.named {
                     fields.push(self.lift_field(arg));
                 }
-                ast::Expr::Instance {
-                    name: path.name,
+                Node::new(ast::Expr::Instance {
+                    path: path.clone(),
                     unnamed,
                     fields,
-                }
+                })
             }
-            _ => ast::Expr::Dart(expr),
+            _ => Node::new(ast::Expr::Dart(expr)),
         }
     }
 

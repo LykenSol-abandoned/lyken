@@ -2,38 +2,43 @@ use syntax::symbol::Symbol;
 use dart;
 use node::Node;
 
+#[derive(Debug)]
 pub enum Item {
     ComponentDef {
         name: Symbol,
-        fields: Vec<FieldDef>,
+        fields: Vec<Node<FieldDef>>,
         dart_members: Vec<Node<dart::ast::ClassMember>>,
-        body: Option<Expr>,
+        body: Option<Node<Expr>>,
     },
     Dart(Node<dart::ast::Item>),
 }
 
+#[derive(Debug)]
 pub struct FieldDef {
     pub mutable: bool,
     pub name: Symbol,
-    pub ty: Option<Type>,
-    pub default: Option<Expr>,
+    pub ty: Option<Node<Type>>,
+    pub default: Option<Node<Expr>>,
 }
 
+#[derive(Debug)]
 pub struct Field {
     pub name: Symbol,
-    pub value: Expr,
+    pub value: Node<Expr>,
 }
 
+#[derive(Debug)]
 pub enum Type {
     Dart(Node<dart::ast::Type>),
 }
 
+#[derive(Debug)]
 pub enum Expr {
     Instance {
-        name: Symbol,
-        unnamed: Vec<Expr>,
+        path: Node<dart::ast::Qualified>,
+        unnamed: Vec<Node<Expr>>,
         fields: Vec<Field>,
     },
-    Array(Vec<Expr>),
+    Array(Vec<Node<Expr>>),
     Dart(Node<dart::ast::Expr>),
 }

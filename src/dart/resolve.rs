@@ -2,6 +2,7 @@ use dart::ast::{ClassMember, Expr, FnName, ForLoop, Function, ImportFilter, Item
                 Qualified, Statement, TryPart, TypeParameter, VarDef};
 use dart::visit::{Visit, VisitNode, Visitor};
 use dart::sdk;
+use dsl;
 use node::Node;
 use std::any::Any;
 use std::collections::HashMap;
@@ -33,6 +34,8 @@ pub enum Res {
     Setter(Node<Function>),
     GetterSetter(Node<Function>, Node<Function>),
     Constructor(Node<ClassMember>),
+
+    Dsl(dsl::resolve::Res),
 
     Error,
 }
@@ -94,7 +97,7 @@ impl<T: VisitNode> Node<T> {
             if let Item::Class { ref superclass, .. } = *item {
                 if let Some(ref superclass) = *superclass {
                     if superclass.res().get().is_none() {
-                        resolve(item.root_module(), false);
+                        resolve(item.root_module().unwrap(), false);
                     }
                     if let Some(Res::Class(superclass)) = superclass.res().get() {
                         collector.scope_mut().parent = Some(superclass.exports());
@@ -115,7 +118,7 @@ impl<T: VisitNode> Node<T> {
                     ..
                 } => for class in mixins.iter().chain(interfaces) {
                     if class.res().get().is_none() {
-                        resolve(item.root_module(), false);
+                        resolve(item.root_module().unwrap(), false);
                     }
                     if let Some(Res::Class(class)) = class.res().get() {
                         collector.scope_mut().extend(&class.exports());
@@ -135,34 +138,13 @@ impl<T: VisitNode> Node<T> {
 node_field!(res: Res);
 
 pub fn resolve(module: Node<Module>, fully_resolve: bool) {
-    let collector = &mut Collector {
-        scope: ScopeChain::new(None),
-        exports_only: false,
-        has_error: false,
-    };
-    // TODO compute core_prelude from module != resolve_import("dart:core")
-    let mut core_prelude = true;
-    for item in &module.items {
-        match **item {
-            Item::LibraryName { ref path, .. } => {
-                if *path == [Symbol::intern("dart"), Symbol::intern("core")] {
-                    core_prelude = false;
-                }
-            }
-            _ => {}
-        }
+    let collector = &mut Collector::new();
+
+    if module != Module::load(&sdk::resolve_import("dart:core")) {
+        collector.import(None, "dart:core", &[], None);
     }
-    if core_prelude {
-        collector.import(module.clone(), "dart:core", &[], None);
-    }
-    collector.record("void", Res::Void);
-    collector.record("dynamic", Res::Dynamic);
-    collector.record("null", Res::Null);
-    collector.record("false", Res::False);
-    collector.record("true", Res::True);
 
     module.walk(collector);
-
     if collector.has_error {
         return;
     }
@@ -173,29 +155,47 @@ pub fn resolve(module: Node<Module>, fully_resolve: bool) {
     }
 }
 
-struct Collector {
+pub struct Collector {
     scope: Rc<ScopeChain>,
     exports_only: bool,
-    has_error: bool,
+    pub has_error: bool,
 }
 
 impl Collector {
+    pub fn new() -> Collector {
+        let mut collector = Collector {
+            scope: ScopeChain::new(None),
+            exports_only: false,
+            has_error: false,
+        };
+        collector.record("void", Res::Void);
+        collector.record("dynamic", Res::Dynamic);
+        collector.record("null", Res::Null);
+        collector.record("false", Res::False);
+        collector.record("true", Res::True);
+        collector
+    }
+
     fn scope_mut(&mut self) -> &mut ScopeChain {
         Rc::make_mut(&mut self.scope)
     }
 
-    fn record<S: Into<Symbol>>(&mut self, name: S, res: Res) {
+    pub fn record<S: Into<Symbol>>(&mut self, name: S, res: Res) {
         self.scope_mut().map.insert(name.into(), res);
     }
 
-    fn import(
+    pub fn import(
         &mut self,
-        root_module: Node<Module>,
+        root_module: Option<Node<Module>>,
         uri: &str,
         filters: &[ImportFilter],
         alias: Option<Symbol>,
     ) {
-        let module = sdk::resolve_import(root_module.path.parent().unwrap(), uri);
+        let mut path = sdk::resolve_import(uri);
+        if path.is_relative() {
+            path = root_module.unwrap().path.parent().unwrap().join(&path);
+        }
+        let module = Module::load(&path);
         if module.has_error {
             self.has_error = true;
         }
@@ -220,7 +220,7 @@ impl Collector {
 }
 
 impl Visitor for Collector {
-    fn visit_item(&mut self, item: Node<Item>) {
+    fn dart_item(&mut self, item: Node<Item>) {
         match *item {
             Item::Class { name, .. } | Item::MixinClass { name, .. } => {
                 self.record(name, Res::Class(item.clone()));
@@ -254,7 +254,7 @@ impl Visitor for Collector {
             _ => {}
         }
     }
-    fn visit_class_member(&mut self, class_member: Node<ClassMember>) {
+    fn dart_class_member(&mut self, class_member: Node<ClassMember>) {
         match *class_member {
             ClassMember::Redirect {
                 name: Some(name), ..
@@ -275,7 +275,7 @@ impl Visitor for Collector {
             _ => {}
         }
     }
-    fn visit_function(&mut self, function: Node<Function>) {
+    fn dart_function(&mut self, function: Node<Function>) {
         match function.name {
             FnName::Regular(name) => {
                 self.record(name, Res::Function(function.clone()));
@@ -289,17 +289,17 @@ impl Visitor for Collector {
             _ => {}
         }
     }
-    fn visit_var_def(&mut self, var: Node<VarDef>) {
+    fn dart_var_def(&mut self, var: Node<VarDef>) {
         self.record(var.name, Res::Var(var.clone()));
     }
 }
 
-struct TopLevelResolver<'a> {
-    collector: &'a mut Collector,
+pub struct TopLevelResolver<'a> {
+    pub collector: &'a mut Collector,
 }
 
 impl<'a> Visitor for TopLevelResolver<'a> {
-    fn visit_qualified(&mut self, qualified: Node<Qualified>) {
+    fn dart_qualified(&mut self, qualified: Node<Qualified>) {
         for ty in &qualified.params {
             ty.visit(self);
         }
@@ -326,12 +326,12 @@ impl<'a> Visitor for TopLevelResolver<'a> {
     }
 }
 
-struct Resolver<'a> {
-    collector: &'a mut Collector,
+pub struct Resolver<'a> {
+    pub collector: &'a mut Collector,
 }
 
 impl<'a> Resolver<'a> {
-    fn in_lexical_scope<F: FnOnce(&mut Self) -> R, R>(&mut self, f: F) -> R {
+    pub fn in_lexical_scope<F: FnOnce(&mut Self) -> R, R>(&mut self, f: F) -> R {
         let parent = self.collector.scope.clone();
         self.collector.scope = ScopeChain::new(Some(parent.clone()));
         let result = f(self);
@@ -341,7 +341,7 @@ impl<'a> Resolver<'a> {
 }
 
 impl<'a> Visitor for Resolver<'a> {
-    fn visit_item(&mut self, item: Node<Item>) {
+    fn dart_item(&mut self, item: Node<Item>) {
         self.in_lexical_scope(|this| {
             if let Item::Class {
                 ref superclass,
@@ -370,28 +370,28 @@ impl<'a> Visitor for Resolver<'a> {
             item.walk(this);
         });
     }
-    fn visit_function(&mut self, function: Node<Function>) {
+    fn dart_function(&mut self, function: Node<Function>) {
         function.visit(self.collector);
         self.in_lexical_scope(|this| function.walk(this));
     }
-    fn visit_try_part(&mut self, try_part: &TryPart) {
+    fn dart_try_part(&mut self, try_part: &TryPart) {
         self.in_lexical_scope(|this| try_part.walk(this));
     }
-    fn visit_statement(&mut self, statement: Node<Statement>) {
+    fn dart_statement(&mut self, statement: Node<Statement>) {
         if let Statement::For(_, ForLoop::InVar(..), _) = *statement {
             self.in_lexical_scope(|this| statement.walk(this));
         } else {
             statement.walk(self);
         }
     }
-    fn visit_block(&mut self, statements: &[Node<Statement>]) {
+    fn dart_block(&mut self, statements: &[Node<Statement>]) {
         self.in_lexical_scope(|this| statements.walk(this));
     }
-    fn visit_var_def(&mut self, var: Node<VarDef>) {
+    fn dart_var_def(&mut self, var: Node<VarDef>) {
         var.visit(self.collector);
         var.walk(self);
     }
-    fn visit_expr(&mut self, expr: Node<Expr>) {
+    fn dart_expr(&mut self, expr: Node<Expr>) {
         if expr.res().get().is_some() {
             return;
         }
@@ -405,7 +405,7 @@ impl<'a> Visitor for Resolver<'a> {
         }
         expr.walk(self)
     }
-    fn visit_qualified(&mut self, qualified: Node<Qualified>) {
+    fn dart_qualified(&mut self, qualified: Node<Qualified>) {
         for ty in &qualified.params {
             ty.visit(self);
         }
@@ -426,7 +426,7 @@ impl<'a> Visitor for Resolver<'a> {
         }
         qualified.res().set(res);
     }
-    fn visit_generics(&mut self, generics: &[Node<TypeParameter>]) {
+    fn dart_generics(&mut self, generics: &[Node<TypeParameter>]) {
         for generic in generics {
             self.collector
                 .record(generic.name, Res::TypeParameter(generic.clone()));
