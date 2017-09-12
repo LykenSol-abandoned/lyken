@@ -128,6 +128,9 @@ impl Printer {
                     self.print_str("as ");
                     self.print_ident(ident);
                 }
+                if import.filters.len() > 0 {
+                    self.print_str(" ");
+                }
                 for filter in &import.filters {
                     self.dart_combinator(filter);
                 }
@@ -138,6 +141,9 @@ impl Printer {
                 self.print_str(" export ");
                 self.dart_string_lit(uri);
                 self.print_str(" ");
+                if combinators.len() > 0 {
+                    self.print_str(" ");
+                }
                 for comb in combinators {
                     self.dart_combinator(comb);
                 }
@@ -182,16 +188,7 @@ impl Printer {
                 }
                 self.print_str("class ");
                 self.print_ident(name);
-                if !generics.is_empty() {
-                    self.print_str("< ");
-                    for (i, param) in generics.iter().enumerate() {
-                        self.dart_type_parameter(param);
-                        if i < generics.len() - 1 {
-                            self.print_str(", ");
-                        }
-                    }
-                    self.print_str(" >");
-                }
+                self.dart_generics(generics);
                 self.print_str(" ");
                 if let Some(ref superclass) = *superclass {
                     self.print_str("extends ");
@@ -224,7 +221,6 @@ impl Printer {
                 }
                 self.exit();
                 self.print_str("}");
-
             }
             Item::MixinClass {
                 ref metadata,
@@ -240,20 +236,11 @@ impl Printer {
                 }
                 self.print_str("class ");
                 self.print_ident(name);
-                if !generics.is_empty() {
-                    self.print_str("<");
-                    for (i, param) in generics.iter().enumerate() {
-                        self.dart_type_parameter(param);
-                        if i < generics.len() - 1 {
-                            self.print_str(", ");
-                        }
-                    }
-                    self.print_str(">");
-                }
+                self.dart_generics(generics);
                 self.print_str(" = ");
                 self.dart_qualified(&mixins[0]);
                 self.print_str(" with ");
-                for (i, mixin) in mixins[1..].iter().enumerate() {
+                for (i, mixin) in mixins.iter().enumerate().skip(1) {
                     self.dart_qualified(mixin);
                     if i < mixins.len() - 1 {
                         self.print_str(", ");
@@ -300,11 +287,21 @@ impl Printer {
                 self.dart_typed_name(ty, "", name, generics);
                 self.print_str(";");
             }
-            Item::Function(ref func) => {
-                self.dart_function(func);
+            Item::Function {
+                ref metadata,
+                external,
+                ref function,
+            } => {
+                self.dart_metadata(metadata);
+                if external {
+                    self.print_str("external ");
+                }
+                self.dart_function(function);
             }
-            Item::Vars(ref ty, ref vars) => {
+            Item::Vars(ref metadata, ref ty, ref vars) => {
+                self.dart_metadata(metadata);
                 self.dart_vars(ty, vars);
+                self.print_str(";");
             }
         }
     }
@@ -323,6 +320,7 @@ impl Printer {
             }
             Statement::Vars(ref ty, ref name_and_init) => {
                 self.dart_vars(ty, name_and_init);
+                self.print_str(";");
             }
             Statement::Function(ref func) => {
                 self.dart_function(func);
@@ -338,8 +336,8 @@ impl Printer {
                         self.print_str(" ");
                         if let Some(ref expr) = *exp {
                             self.dart_expr(expr);
-                            self.print_str("; ");
                         }
+                        self.print_str("; ");
                         for (i, expr) in body.iter().enumerate() {
                             self.dart_expr(expr);
                             if i < body.len() - 1 {
@@ -360,7 +358,6 @@ impl Printer {
                 }
                 self.print_str(") ");
                 self.dart_statement(stmt);
-
             }
             Statement::While(ref expr, ref stm) => {
                 self.print_str("while(");
@@ -373,7 +370,7 @@ impl Printer {
                 self.dart_statement(stm);
                 self.print_str("while(");
                 self.dart_expr(expr);
-                self.print_str(") ");
+                self.print_str(");");
             }
             Statement::Switch(ref expr, ref cases) => {
                 self.print_str("switch(");
@@ -383,13 +380,13 @@ impl Printer {
                 for case in cases {
                     for &label in &case.labels {
                         self.print_ident(label);
-                        self.print_str(" ");
+                        self.print_str(": ");
                     }
                     if let Some(ref expr) = case.value {
                         self.print_str("case");
                         self.dart_expr(expr);
                     } else {
-                        self.print_str(" default");
+                        self.print_str("default");
                     }
                     self.print_str(": ");
                     for stm in &case.statements {
@@ -412,7 +409,7 @@ impl Printer {
                 }
             }
             Statement::Rethrow => {
-                self.print_str("retrow");
+                self.print_str("rethrow");
             }
             Statement::Try(ref stm, ref parts) => {
                 self.print_str("try ");
@@ -421,18 +418,20 @@ impl Printer {
                     if let Some(ref ty) = part.on {
                         self.print_str("on ");
                         self.dart_type(ty);
-
                     }
                     if let Some(ref catch) = part.catch {
-                        self.print_str("catch ");
+                        self.print_str(" catch (");
                         self.print_ident(catch.exception.name);
                         if let Some(ref trace) = catch.trace {
+                            self.print_str(", ");
                             self.print_ident(trace.name);
                         }
+                        self.print_str(")");
                     }
                     if part.catch.is_none() & part.on.is_none() {
-                        self.dart_statement(&part.block);
+                        self.print_str("finally ");
                     }
+                    self.dart_statement(&part.block);
                 }
             }
             Statement::Break(ref expr) => {
@@ -470,10 +469,12 @@ impl Printer {
                 self.print_str(";");
             }
 
-            Statement::Expression(ref expr) => if let Some(ref exp) = *expr {
-                self.dart_expr(exp);
+            Statement::Expression(ref expr) => {
+                if let Some(ref exp) = *expr {
+                    self.dart_expr(exp);
+                }
                 self.print_str(";");
-            },
+            }
             Statement::Assert(ref args) => {
                 self.print_str("assert");
                 self.dart_arguments(args);
@@ -537,7 +538,7 @@ impl Printer {
             }
             Expr::Closure(ref args, ref body) => {
                 self.dart_fn_args(args);
-                self.dart_function_body(body);
+                self.dart_function_body(body, false);
             }
             Expr::New {
                 const_,
@@ -565,8 +566,8 @@ impl Printer {
                     self.dart_type(ty);
                     self.print_str(">");
                 }
+                self.print_str("[");
                 if !elements.is_empty() {
-                    self.print_str("[");
                     self.enter();
                     if elements.len() > 1 {
                         for (i, elem) in elements.iter().enumerate() {
@@ -579,8 +580,8 @@ impl Printer {
                         self.dart_expr(&elements[0]);
                     }
                     self.exit();
-                    self.print_str("]");
                 }
+                self.print_str("]");
             }
             Expr::Map {
                 const_,
@@ -649,35 +650,49 @@ impl Printer {
     fn dart_function(&mut self, func: &Function) {
         self.dart_type_spaced(&func.sig.return_type);
         self.dart_function_name(func.name);
-        self.dart_fn_args(&func.sig);
+        self.dart_generics(&func.generics);
+        match func.name {
+            FnName::Getter(..) => if func.sig.async {
+                if !func.sig.generator {
+                    self.print_str(" async ");
+                } else {
+                    self.print_str(" async* ");
+                }
+            } else {
+                if func.sig.generator {
+                    self.print_str(" sync* ");
+                }
+            },
+            _ => {
+                self.dart_fn_args(&func.sig);
+            }
+        }
         if let Some(ref body) = func.body {
-            self.dart_function_body(body);
+            self.dart_function_body(body, true);
         } else {
             self.print_str(";");
         }
     }
 
     fn dart_cascade(&mut self, cascade: &Cascade) {
+        match cascade.suffixes[0] {
+            Suffix::Field(..) => {
+                self.print_str(".");
+            }
+            _ => {
+                self.print_str("..");
+            }
+        }
         for suffix in &cascade.suffixes {
-            match *suffix {
-                Suffix::Field(..) => {
-                    self.print_str(".");
-                }
-                _ => {
-                    self.print_str("..");
-                }
-            }
             self.dart_suffix(&suffix);
-            if let Some((op, ref expr)) = cascade.assign {
-                self.print_str(" ");
-                if let Some(op) = op {
-                    self.dart_binary_op(BinOp::Value(op));
-                    self.print_str(" ");
-                } else {
-                    self.print_str("= ");
-                }
-                self.dart_expr(expr);
+        }
+        if let Some((op, ref expr)) = cascade.assign {
+            self.print_str(" ");
+            if let Some(op) = op {
+                self.dart_binary_op(BinOp::Value(op));
             }
+            self.print_str("= ");
+            self.dart_expr(expr);
         }
     }
 
@@ -822,12 +837,14 @@ impl Printer {
         self.dart_expr(&arg.expr);
     }
 
-    fn dart_function_body(&mut self, body: &FnBody) {
+    fn dart_function_body(&mut self, body: &FnBody, semicolum: bool) {
         match *body {
             FnBody::Arrow(ref expr) => {
                 self.print_str(" => ");
                 self.dart_expr(expr);
-                self.print_str(";");
+                if semicolum {
+                    self.print_str(";");
+                }
             }
             FnBody::Block(ref stm) => {
                 self.print_str(" ");
@@ -838,6 +855,9 @@ impl Printer {
                 if let Some(ref lit) = *lit {
                     self.dart_string_lit(lit);
                 }
+                if semicolum {
+                    self.print_str(";");
+                }
             }
         }
     }
@@ -846,7 +866,7 @@ impl Printer {
         self.print_str("(");
         for (i, it) in args.required.iter().enumerate() {
             self.dart_arg_def(it);
-            if i < args.required.len() - 1 {
+            if i < args.required.len() - 1 || !args.optional.is_empty() {
                 self.print_str(", ");
             }
         }
@@ -871,7 +891,11 @@ impl Printer {
                     for (i, arg) in args.optional.iter().enumerate() {
                         self.dart_arg_def(arg);
                         if let Some(ref expr) = arg.var.init {
-                            self.print_str(": ");
+                            if arg.default_uses_eq {
+                                self.print_str(" = ");
+                            } else {
+                                self.print_str(": ");
+                            }
                             self.dart_expr(expr);
                         }
                         if i < args.optional.len() - 1 {
@@ -899,10 +923,15 @@ impl Printer {
 
     fn dart_arg_def(&mut self, param: &ArgDef) {
         self.dart_metadata(&param.metadata);
-        match param.ty.fcv {
-            FinalConstVar::Final => self.print_str("final "),
-            FinalConstVar::Const => self.print_str("const "),
-            FinalConstVar::Var => {}
+        if param.covariant {
+            self.print_str("covariant ");
+        }
+        if let Some(fcv) = param.ty.fcv {
+            match fcv {
+                FinalConstVar::Final => self.print_str("final "),
+                FinalConstVar::Const => self.print_str("const "),
+                FinalConstVar::Var => self.print_str("var "),
+            }
         }
         if param.field {
             self.dart_typed_name(&param.ty.ty, "this.", param.var.name, &[]);
@@ -912,12 +941,12 @@ impl Printer {
     }
 
     fn dart_vars(&mut self, var_ty: &VarType, vars: &[Node<VarDef>]) {
-        match var_ty.fcv {
-            FinalConstVar::Final => self.print_str("final "),
-            FinalConstVar::Const => self.print_str("const "),
-            FinalConstVar::Var => if let Type::Infer = *var_ty.ty {
-                self.print_str("var ");
-            },
+        if let Some(fcv) = var_ty.fcv {
+            match fcv {
+                FinalConstVar::Final => self.print_str("final "),
+                FinalConstVar::Const => self.print_str("const "),
+                FinalConstVar::Var => self.print_str("var "),
+            }
         }
         self.dart_type_spaced(&var_ty.ty);
         for (i, var) in vars.iter().enumerate() {
@@ -926,7 +955,6 @@ impl Printer {
                 self.print_str(", ");
             }
         }
-        self.print_str(";");
     }
 
     fn dart_name_and_initializer(&mut self, ident: &VarDef) {
@@ -955,6 +983,8 @@ impl Printer {
     fn dart_combinator(&mut self, comb: &ImportFilter) {
         if comb.hide == true {
             self.print_str("hide ");
+        } else {
+            self.print_str("show ");
         }
         for (i, ident) in comb.names.iter().enumerate() {
             self.print_ident(*ident);
@@ -966,7 +996,6 @@ impl Printer {
 
     fn dart_type_parameter(&mut self, param: &Node<TypeParameter>) {
         self.dart_metadata(&param.metadata);
-        self.print_str(" ");
         self.print_ident(param.name);
         if let Some(ref extends) = param.extends {
             self.print_str(" extends ");
@@ -1031,7 +1060,7 @@ impl Printer {
                 }
                 self.print_str(" ");
                 if let Some(ref body) = *function_body {
-                    self.dart_function_body(body);
+                    self.dart_function_body(body, true);
                 } else {
                     self.print_str(";");
                 }
@@ -1055,6 +1084,7 @@ impl Printer {
                     self.print_str("static ");
                 }
                 self.dart_vars(var_type, initializers);
+                self.print_str(";");
             }
         }
     }
@@ -1379,5 +1409,18 @@ impl Printer {
             tokens.push(Token::WhiteSpace(str_to_span("\n")));
         }
         tokens
+    }
+
+    fn dart_generics(&mut self, generics: &[Node<TypeParameter>]) {
+        if !generics.is_empty() {
+            self.print_str("<");
+            for (i, param) in generics.iter().enumerate() {
+                self.dart_type_parameter(param);
+                if i < generics.len() - 1 {
+                    self.print_str(", ");
+                }
+            }
+            self.print_str(">");
+        }
     }
 }

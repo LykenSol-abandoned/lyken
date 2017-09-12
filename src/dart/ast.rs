@@ -138,8 +138,12 @@ pub enum Item {
         generics: Vec<Node<TypeParameter>>,
         ty: Node<Type>,
     },
-    Function(Node<Function>),
-    Vars(VarType, Vec<Node<VarDef>>),
+    Function {
+        metadata: Metadata,
+        external: bool,
+        function: Node<Function>,
+    },
+    Vars(Metadata, VarType, Vec<Node<VarDef>>),
 }
 
 #[derive(Debug)]
@@ -533,6 +537,7 @@ pub struct ArgDef {
     pub covariant: bool,
     pub ty: VarType,
     pub field: bool,
+    pub default_uses_eq: bool,
     pub var: Node<VarDef>,
 }
 
@@ -541,11 +546,9 @@ impl ArgDef {
         ArgDef {
             metadata: vec![],
             covariant: false,
-            ty: VarType {
-                fcv: FinalConstVar::Var,
-                ty,
-            },
+            ty: VarType { fcv: None, ty },
             field: false,
+            default_uses_eq: false,
             var: Node::new(VarDef {
                 name: name.into(),
                 init: None,
@@ -556,11 +559,11 @@ impl ArgDef {
 
 #[derive(Debug)]
 pub struct VarType {
-    pub fcv: FinalConstVar,
+    pub fcv: Option<FinalConstVar>,
     pub ty: Node<Type>,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum FinalConstVar {
     Final,
     Const,

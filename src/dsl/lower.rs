@@ -188,10 +188,11 @@ impl Lowerer {
                 metadata: vec![],
                 covariant: false,
                 ty: ast::VarType {
-                    fcv: ast::FinalConstVar::Var,
+                    fcv: None,
                     ty: Node::new(ast::Type::Infer),
                 },
                 field: true,
+                default_uses_eq: false,
                 var: Node::new(ast::VarDef {
                     name: field.name,
                     init: field
@@ -254,9 +255,9 @@ impl Lowerer {
             static_: false,
             var_type: ast::VarType {
                 fcv: if field.mutable {
-                    ast::FinalConstVar::Var
+                    None
                 } else {
-                    ast::FinalConstVar::Final
+                    Some(ast::FinalConstVar::Final)
                 },
                 ty: var_ty,
             },

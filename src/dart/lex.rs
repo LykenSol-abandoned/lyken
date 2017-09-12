@@ -4,6 +4,7 @@ use unicode_xid::UnicodeXID;
 use std::str;
 use syntax::symbol::Symbol;
 use std::fmt;
+use std::path::Path;
 use std::rc::Rc;
 use syntax::codemap::{BytePos, FileMap, Pos, Span};
 
@@ -146,6 +147,15 @@ impl Lexer {
         }
     }
 
+    pub fn from_file(path: &Path) -> ::std::io::Result<Lexer> {
+        let codemap = ::codemap();
+        let file = codemap
+            .get_filemap(path.to_str().unwrap())
+            .ok_or(())
+            .or_else(|_| codemap.load_file(path))?;
+        Ok(Lexer::new(::mk_sp(file.start_pos, file.end_pos)))
+    }
+
     fn bump(&mut self) {
         if self.next_pos >= self.end {
             return;
@@ -189,15 +199,18 @@ impl Lexer {
         bump!();
 
         if self.c == '#' {
-            bump!(or emit!(ErrorMsg::UnterminatedShebang));
+            span.lo = self.pos;
+            span.hi = self.next_pos;
+            bump!(or put!(Token::Punctuation('#')));
             if self.c != '!' {
-                emit!(ErrorMsg::UnterminatedShebang);
+                put!(Token::Punctuation('#'));
+            } else {
+                bump!(or emit!(ErrorMsg::UnterminatedShebang));
+                while self.c != '\n' {
+                    bump!(or put!(Token::WhiteSpace(span)));
+                }
+                put!(Token::WhiteSpace(span));
             }
-            bump!(or emit!(ErrorMsg::UnterminatedShebang));
-            while self.c != '\n' {
-                bump!(or put!(Token::WhiteSpace(span)));
-            }
-            put!(Token::WhiteSpace(span));
         }
 
         loop {
@@ -275,7 +288,6 @@ impl Lexer {
                     put!(Token::Punctuation('/'));
                 }
             } else if self.c == '\'' || self.c == '"' || interpolation_before {
-
                 let mut quote = self.c;
                 let mut raw = false;
                 let mut triple = false;

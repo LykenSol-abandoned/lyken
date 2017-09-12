@@ -65,14 +65,7 @@ macro_rules! expected {
 }
 
 impl<'a> Parser<'a> {
-    pub fn with_file<F: FnOnce(Parser) -> ParseResult<R>, R>(path: &Path, f: F) -> ParseResult<R> {
-        let codemap = ::codemap();
-        let file = codemap
-            .get_filemap(path.to_str().unwrap())
-            .ok_or(())
-            .or_else(|_| codemap.load_file(path))?;
-        let tokens = Lexer::new(::mk_sp(file.start_pos, file.end_pos))
-            .tokenize()?;
+    pub fn new(path: &Path, tokens: &'a [(Span, Token)]) -> Self {
         let mut parser = Parser {
             path: path.to_path_buf(),
             tokens: tokens.iter().cloned(),
@@ -81,7 +74,12 @@ impl<'a> Parser<'a> {
             skip_blocks: false,
         };
         parser.bump();
-        f(parser)
+        parser
+    }
+
+    pub fn with_file<F: FnOnce(Parser) -> ParseResult<R>, R>(path: &Path, f: F) -> ParseResult<R> {
+        let tokens = Lexer::from_file(path)?.tokenize()?;
+        f(Parser::new(path, &tokens))
     }
 
     pub fn skip_blocks(mut self) -> Self {
@@ -775,7 +773,9 @@ impl<'a> Parser<'a> {
             return Ok(Node::new(Expr::String(strings)));
         }
         if self.eat_punctuation('#') {
-            return Ok(Node::new(Expr::Identifier(self.parse_ident()?)));
+            return Ok(Node::new(
+                Expr::Symbol(SymbolLiteral::Path(vec![self.parse_ident()?])),
+            ));
         }
         if let Ok(ident) = self.parse_ident() {
             return Ok(Node::new(Expr::Identifier(ident)));
@@ -881,9 +881,13 @@ impl<'a> Parser<'a> {
             ty.ty = Node::new(Type::FunctionOld(self.dart_fn_args(ty.ty)?));
         }
         let mut init = None;
+        let mut default_uses_eq = false;
         for &separator in default_separators {
             if self.eat_punctuation(separator) {
                 init = Some(self.dart_expr()?);
+                if separator == '=' {
+                    default_uses_eq = true;
+                }
                 break;
             }
         }
@@ -892,17 +896,18 @@ impl<'a> Parser<'a> {
             covariant,
             ty,
             field,
+            default_uses_eq,
             var: Node::new(VarDef { name, init }),
         })
     }
 
     fn dart_var_type(&mut self, requires_var: bool) -> ParseResult<VarType> {
-        let fcv = if self.eat_keyword("const") {
-            FinalConstVar::Const
+        let mut fcv = if self.eat_keyword("const") {
+            Some(FinalConstVar::Const)
         } else if self.eat_keyword("final") {
-            FinalConstVar::Final
+            Some(FinalConstVar::Final)
         } else {
-            FinalConstVar::Var
+            None
         };
         let ty = self.try(|p| {
             let ty = p.dart_type()?;
@@ -914,11 +919,14 @@ impl<'a> Parser<'a> {
             }
         }).ok_or(())
             .or_else(|_| -> ParseResult<_> {
-                if let FinalConstVar::Var = fcv {
+                if fcv.is_none() {
                     if requires_var {
                         self.expect_keyword("var")?;
+                        fcv = Some(FinalConstVar::Var);
                     } else {
-                        self.eat_keyword("var");
+                        if self.eat_keyword("var") {
+                            fcv = Some(FinalConstVar::Var);
+                        }
                     }
                 }
                 Ok(Node::new(Type::Infer))
@@ -983,8 +991,9 @@ impl<'a> Parser<'a> {
         if self.is_punctuation('{') {
             return Ok(self.dart_block()?);
         }
-        let await = self.eat_keyword("await");
-        if self.eat_keyword("for") {
+        if let Some((await, _)) =
+            self.try(|p| Ok((p.eat_keyword("await"), p.expect_keyword("for")?)))
+        {
             self.expect_punctuation('(')?;
             let for_loop = self.try(|p| {
                 let var_type = p.try(|p| p.dart_var_type(true));
@@ -1357,11 +1366,9 @@ impl<'a> Parser<'a> {
         } else {
             self.try(|p| Ok((p.dart_type()?, p.dart_fn_name()?)))
         };
-        let (return_type, name) = return_type_and_name
-            .ok_or(())
-            .or_else(
-                |_| -> ParseResult<_> { Ok((Node::new(Type::Infer), self.dart_fn_name()?)) },
-            )?;
+        let (return_type, name) = return_type_and_name.ok_or(()).or_else(
+            |_| -> ParseResult<_> { Ok((Node::new(Type::Infer), self.dart_fn_name()?)) },
+        )?;
         let mut generics = vec![];
         if self.eat_punctuation('<') {
             generics = self.parse_one_or_more(',', |p| p.dart_type_param_def())?;
@@ -1370,6 +1377,7 @@ impl<'a> Parser<'a> {
         let sig = {
             if let FnName::Getter(_) = name {
                 let mut sig = FnSig::default();
+                sig.return_type = return_type;
                 if self.eat_keyword("async") {
                     sig.async = true;
                     sig.generator = self.eat_punctuation('*');
@@ -1459,12 +1467,12 @@ impl<'a> Parser<'a> {
         }
 
         let mut static_ = false;
-        let mut fcv = FinalConstVar::Var;
+        let mut fcv = None;
         for &mq in &method_qualifiers {
             match mq {
                 MethodQualifiers::Static => static_ = true,
-                MethodQualifiers::Final => fcv = FinalConstVar::Final,
-                MethodQualifiers::Const => fcv = FinalConstVar::Const,
+                MethodQualifiers::Final => fcv = Some(FinalConstVar::Final),
+                MethodQualifiers::Const => fcv = Some(FinalConstVar::Const),
                 _ => break,
             }
         }
@@ -1479,8 +1487,9 @@ impl<'a> Parser<'a> {
                 }
             }).ok_or(())
                 .or_else(|_| -> ParseResult<_> {
-                    if let FinalConstVar::Var = fcv {
+                    if fcv.is_none() {
                         p.expect_keyword("var")?;
+                        fcv = Some(FinalConstVar::Var);
                     }
                     Ok(Node::new(Type::Infer))
                 })?;
@@ -1672,16 +1681,21 @@ impl<'a> Parser<'a> {
             }));
         }
 
-        self.try(|p| {
+        if let Some((var_type, vars)) = self.try(|p| {
             let var_type = p.dart_var_type(true)?;
-            let names_and_initializers =
-                p.parse_one_or_more(',', |p| p.dart_name_and_initializer())?;
+            let vars = p.parse_one_or_more(',', |p| p.dart_name_and_initializer())?;
             p.expect_punctuation(';')?;
-            Ok(Node::new(Item::Vars(var_type, names_and_initializers)))
-        }).ok_or(())
-            .or_else(|_| {
-                Ok(Node::new(Item::Function(self.dart_function(false)?)))
-            })
+            Ok((var_type, vars))
+        }) {
+            return Ok(Node::new(Item::Vars(metadata, var_type, vars)));
+        }
+
+        let external = self.eat_keyword("external");
+        Ok(Node::new(Item::Function {
+            metadata,
+            external,
+            function: self.dart_function(false)?,
+        }))
     }
 
     fn dart_import_filters(&mut self) -> ParseResult<Vec<ImportFilter>> {

@@ -231,10 +231,10 @@ impl Visitor for Collector {
             Item::TypeAlias { name, .. } => {
                 self.record(name, Res::TypeAlias(item.clone()));
             }
-            Item::Function(ref function) => {
+            Item::Function { ref function, .. } => {
                 function.visit(self);
             }
-            Item::Vars(_, ref vars) => for var in vars {
+            Item::Vars(_, _, ref vars) => for var in vars {
                 var.visit(self);
             },
             Item::Part { ref module, .. } => {
