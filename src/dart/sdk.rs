@@ -3,8 +3,6 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
-use dart::ast::Module;
-use node::Node;
 use url::Url;
 
 pub const FLUTTER_PATH: &str = "flutter/";
@@ -104,8 +102,7 @@ impl Packages {
     }
 }
 
-// TODO return just the PathBuf to pass to Module::load.
-pub fn resolve_import(base_path: &Path, uri: &str) -> Node<Module> {
+pub fn resolve_import(uri: &str) -> PathBuf {
     let mut uri_parts = uri.split('/');
     let mut path = if uri.starts_with("dart:") {
         let prefix = uri_parts.next().unwrap();
@@ -124,8 +121,8 @@ pub fn resolve_import(base_path: &Path, uri: &str) -> Node<Module> {
                 .unwrap_or_else(|| PathBuf::from(prefix))
         })
     } else {
-        base_path.to_path_buf()
+        PathBuf::new()
     };
     path.extend(uri_parts);
-    Module::load(&path)
+    path
 }

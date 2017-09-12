@@ -20,12 +20,12 @@ impl<T: 'static> Node<T> {
             None
         }
     }
-    pub fn root_module(&self) -> Node<Module> {
+    pub fn root_module(&self) -> Option<Node<Module>> {
         let mut node: Node<Any> = self.clone();
         while let Some(parent) = node.parent_any().get() {
             node = parent;
         }
-        node.downcast().unwrap()
+        node.downcast()
     }
 }
 

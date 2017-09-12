@@ -17,7 +17,7 @@ impl Lowerer {
         Lowerer {}
     }
 
-    pub fn lower_items(&mut self, items: &[Item]) -> Vec<Node<ast::Item>> {
+    pub fn lower_items(&mut self, items: &[Node<Item>]) -> Vec<Node<ast::Item>> {
         items
             .iter()
             .flat_map(|item| self.lower_item(item))
@@ -164,7 +164,7 @@ impl Lowerer {
         }
     }
 
-    fn lower_constructor<'a, I: IntoIterator<Item = &'a FieldDef>>(
+    fn lower_constructor<'a, I: IntoIterator<Item = &'a Node<FieldDef>>>(
         &mut self,
         strategy: Strategy,
         fields: I,
@@ -279,7 +279,7 @@ impl Lowerer {
     fn lower_expr(&mut self, expr: &Expr) -> Node<ast::Expr> {
         match *expr {
             Expr::Instance {
-                name,
+                ref path,
                 ref unnamed,
                 ref fields,
             } => {
@@ -287,7 +287,7 @@ impl Lowerer {
                 let named = fields.iter().map(|field| self.lower_field(field)).collect();
                 Node::new(ast::Expr::New {
                     const_: false,
-                    path: ast::Qualified::one(name, vec![]),
+                    path: path.clone(),
                     args: ast::Args { unnamed, named },
                 })
             }

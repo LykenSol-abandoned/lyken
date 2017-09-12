@@ -1,14 +1,16 @@
 #![allow(unused_doc_comment)]
 
+use dart;
 use dsl::ast::*;
 use dart::parse::{ParseResult, Parser};
+use node::Node;
 
 impl<'a> Parser<'a> {
-    fn dsl_type(&mut self) -> ParseResult<Type> {
-        Ok(Type::Dart(self.dart_type()?))
+    fn dsl_type(&mut self) -> ParseResult<Node<Type>> {
+        Ok(Node::new(Type::Dart(self.dart_type()?)))
     }
 
-    fn dsl_expr(&mut self) -> ParseResult<Expr> {
+    fn dsl_expr(&mut self) -> ParseResult<Node<Expr>> {
         if self.probe(|p| {
             p.parse_ident().is_ok() && (p.eat_punctuation('(') || p.eat_punctuation('{'))
         }) {
@@ -30,11 +32,11 @@ impl<'a> Parser<'a> {
                 self.expect_punctuation('}')?;
                 (vec![], fields)
             };
-            return Ok(Expr::Instance {
-                name,
+            return Ok(Node::new(Expr::Instance {
+                path: dart::ast::Qualified::one(name, vec![]),
                 unnamed,
                 fields,
-            });
+            }));
         }
         if self.eat_punctuation('[') {
             let mut exprs = vec![];
@@ -45,9 +47,9 @@ impl<'a> Parser<'a> {
                 }
             }
             self.expect_punctuation(']')?;
-            return Ok(Expr::Array(exprs));
+            return Ok(Node::new(Expr::Array(exprs)));
         }
-        Ok(Expr::Dart(self.dart_expr()?))
+        Ok(Node::new(Expr::Dart(self.dart_expr()?)))
     }
 
     fn dsl_field(&mut self) -> ParseResult<Field> {
@@ -73,7 +75,7 @@ impl<'a> Parser<'a> {
         Ok(fields)
     }
 
-    fn dsl_field_def(&mut self) -> ParseResult<FieldDef> {
+    fn dsl_field_def(&mut self) -> ParseResult<Node<FieldDef>> {
         let mutable = self.eat_keyword("mut");
         let name = self.parse_ident()?;
         let mut fd = FieldDef {
@@ -91,10 +93,10 @@ impl<'a> Parser<'a> {
             self.expect_punctuation('=')?;
             fd.default = Some(self.dsl_expr()?);
         }
-        Ok(fd)
+        Ok(Node::new(fd))
     }
 
-    fn dsl_field_defs(&mut self) -> ParseResult<Vec<FieldDef>> {
+    fn dsl_field_defs(&mut self) -> ParseResult<Vec<Node<FieldDef>>> {
         let mut fields = vec![];
         while let Some(field) = self.try(|p| p.dsl_field_def()) {
             fields.push(field);
@@ -103,7 +105,7 @@ impl<'a> Parser<'a> {
         Ok(fields)
     }
 
-    fn dsl_item(&mut self) -> ParseResult<Item> {
+    fn dsl_item(&mut self) -> ParseResult<Node<Item>> {
         if self.eat_keyword("def") {
             let name = self.parse_ident()?;
             self.expect_punctuation('{')?;
@@ -119,17 +121,17 @@ impl<'a> Parser<'a> {
             };
 
             self.expect_punctuation('}')?;
-            return Ok(Item::ComponentDef {
+            return Ok(Node::new(Item::ComponentDef {
                 name,
                 fields,
                 dart_members,
                 body,
-            });
+            }));
         }
-        Ok(Item::Dart(self.dart_item()?))
+        Ok(Node::new(Item::Dart(self.dart_item()?)))
     }
 
-    pub fn dsl_items(&mut self) -> ParseResult<Vec<Item>> {
+    pub fn dsl_items(&mut self) -> ParseResult<Vec<Node<Item>>> {
         let mut items = vec![];
         while !self.out_of_tokens() {
             items.push(self.dsl_item()?);

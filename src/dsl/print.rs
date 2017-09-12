@@ -1,9 +1,10 @@
 use dsl::ast::*;
 use dart::print::Printer;
 use dart::lex::Token;
+use node::Node;
 
 impl Printer {
-    pub fn dsl_items(mut self, items: &[Item]) -> Vec<Token> {
+    pub fn dsl_items(mut self, items: &[Node<Item>]) -> Vec<Token> {
         for item in items {
             self.dsl_item(item);
             self.new_line();
@@ -73,11 +74,11 @@ impl Printer {
     fn dsl_expr(&mut self, expr: &Expr) {
         match *expr {
             Expr::Instance {
-                name,
+                ref path,
                 ref unnamed,
                 ref fields,
             } => {
-                self.print_ident(name);
+                self.dart_qualified(path);
                 if !unnamed.is_empty() {
                     self.print_str("(");
                     self.enter();

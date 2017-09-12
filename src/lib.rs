@@ -1,9 +1,9 @@
 #![feature(catch_expr, coerce_unsized, conservative_impl_trait, rustc_private, unsize)]
 
 #[macro_use]
-extern crate error_chain;
-#[macro_use]
 extern crate enum_primitive;
+#[macro_use]
+extern crate error_chain;
 extern crate syntax;
 extern crate unicode_width;
 extern crate unicode_xid;
@@ -31,6 +31,8 @@ pub mod dsl {
     pub mod lower;
     pub mod parse;
     pub mod print;
+    pub mod resolve;
+    pub mod visit;
 }
 
 pub fn codemap() -> Rc<CodeMap> {
