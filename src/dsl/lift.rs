@@ -15,14 +15,6 @@ pub struct Lifter {
     classes: HashMap<Node<Item>, Class>,
 }
 
-struct Class {
-    name: Symbol,
-    kind: ClassKind,
-    fields: Vec<ast::FieldDef>,
-    dart_members: Vec<Node<ClassMember>>,
-    build_return: Option<ast::Expr>,
-}
-
 #[derive(Clone)]
 enum ClassKind {
     Plain,
@@ -30,6 +22,59 @@ enum ClassKind {
     StatelessWidget,
     StatefulWidget,
     State { widget_class: Node<Item> },
+}
+
+struct Class {
+    name: Symbol,
+    kind: ClassKind,
+    fields: Vec<ast::FieldDef>,
+    dart_members: Vec<Node<ClassMember>>,
+}
+
+impl Class {
+    fn lift_build_return(&mut self, lifter: &mut Lifter) -> Option<ast::Expr> {
+        let mut build_return = None;
+        self.dart_members.retain(|member| {
+            macro_rules! require {
+                ($($c:expr),+) => {
+                    if !($($c)&&+) {
+                        return true;
+                    }
+                };
+            }
+            match *member.clone() {
+                ClassMember::Method(ref meta, ref qualif, ref function) => {
+                    match function.name {
+                        FnName::Regular(name) if name == "build" => {}
+                        _ => {
+                            return true;
+                        }
+                    }
+                    require![
+                        meta.len() == 1,
+                        meta[0].qualified.prefix.is_none(),
+                        meta[0].qualified.name == "override",
+                        meta[0].arguments.is_none(),
+                        qualif.is_empty(),
+                        function.generics.is_empty()
+                    ];
+                    if let Some(FnBody::Block(ref stm)) = function.body {
+                        if let Statement::Block(ref stm) = **stm {
+                            if stm.len() == 1 {
+                                if let Statement::Return(Some(ref expr)) = *stm[0] {
+                                    build_return = Some(lifter.lift_expr(expr.clone()));
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+            true
+        });
+        build_return
+    }
 }
 
 impl Lifter {
@@ -76,59 +121,47 @@ impl Lifter {
         }
 
         for item in state_classes {
-            let (kind, fields, dart_members, build_return);
+            let (kind, fields, dart_members);
             {
                 let class = self.classes.get_mut(&item).unwrap();
                 kind = mem::replace(&mut class.kind, ClassKind::Remove);
                 fields = mem::replace(&mut class.fields, vec![]);
                 dart_members = mem::replace(&mut class.dart_members, vec![]);
-                build_return = class.build_return.take();
             }
             if let ClassKind::State { ref widget_class } = kind {
                 let widget_class = self.classes.get_mut(widget_class).unwrap();
                 widget_class.fields.extend(fields);
                 widget_class.dart_members.extend(dart_members);
-                widget_class.build_return = build_return;
             }
         }
 
-        let mut replacements: HashMap<_, _> = self.classes
-            .drain()
-            .filter_map(
-                |(
-                    item,
-                    Class {
-                        name,
-                        kind,
-                        fields,
-                        dart_members,
-                        build_return,
-                    },
-                )| {
-                    if let ClassKind::Remove = kind {
-                        return Some((item, vec![]));
+        let mut replacements: HashMap<_, _> = mem::replace(&mut self.classes, HashMap::new())
+            .into_iter()
+            .filter_map(|(item, mut class)| {
+                if let ClassKind::Remove = class.kind {
+                    return Some((item, vec![]));
+                }
+                let body = match class.kind {
+                    ClassKind::StatelessWidget | ClassKind::StatefulWidget => {
+                        match class.lift_build_return(self) {
+                            Some(build_return) => Some(build_return),
+                            None => return None,
+                        }
                     }
-                    Some((
-                        item,
-                        vec![
-                            ast::Item::ComponentDef {
-                                name,
-                                fields,
-                                dart_members,
-                                body: match (build_return, kind) {
-                                    (None, ClassKind::Plain) => None,
-                                    (Some(build_return), ClassKind::StatelessWidget) |
-                                    (Some(build_return), ClassKind::StatefulWidget) => {
-                                        Some(build_return)
-                                    }
-
-                                    _ => return None,
-                                },
-                            },
-                        ],
-                    ))
-                },
-            )
+                    _ => None,
+                };
+                Some((
+                    item,
+                    vec![
+                        ast::Item::ComponentDef {
+                            name: class.name,
+                            fields: class.fields,
+                            dart_members: class.dart_members,
+                            body,
+                        },
+                    ],
+                ))
+            })
             .collect();
 
         items
@@ -197,7 +230,6 @@ impl Lifter {
                     kind,
                     fields: vec![],
                     dart_members: vec![],
-                    build_return: None,
                 };
                 let mut pub_fields = 0;
                 let mut failed = false;
@@ -258,10 +290,18 @@ impl Lifter {
                             }
                         };
                     }
-                    if failed {
-                        return false;
-                    }
+                    require![!failed];
                     match *member.clone() {
+                        ClassMember::Method(.., ref function) => {
+                            if let ClassKind::StatefulWidget = class.kind {
+                                if let FnName::Regular(name) = function.name {
+                                    if name == "createState" {
+                                        return false;
+                                    }
+                                }
+                            }
+                            return true;
+                        }
                         ClassMember::Constructor {
                             ref metadata,
                             ref method_qualifiers,
@@ -353,58 +393,6 @@ impl Lifter {
                                 }
                             }
                             false
-                        }
-                        _ => true,
-                    }
-                });
-                require![!failed];
-
-                dart_members.retain(|member| {
-                    macro_rules! require {
-                        ($($c:expr),+) => {
-                            if !($($c)&&+) {
-                                failed = true;
-                                return false;
-                            }
-                        };
-                    }
-                    require![!failed];
-                    match *member.clone() {
-                        ClassMember::Method(ref meta, ref qualif, ref function) => {
-                            match function.name {
-                                FnName::Regular(name) if name == "build" => {}
-                                FnName::Regular(name) if name == "createState" => {
-                                    return false;
-                                }
-                                _ => {
-                                    return true;
-                                }
-                            }
-                            require![
-                                meta.len() == 1,
-                                meta[0].qualified.prefix.is_none(),
-                                meta[0].qualified.name == "override",
-                                meta[0].arguments.is_none(),
-                                qualif.is_empty(),
-                                function.generics.is_empty(),
-                                match function.body {
-                                    Some(FnBody::Block(ref stm)) => match **stm {
-                                        Statement::Block(ref stm) => {
-                                            stm.len() == 1 && match *stm[0] {
-                                                Statement::Return(Some(ref expr)) => {
-                                                    class.build_return =
-                                                        Some(self.lift_expr(expr.clone()));
-                                                    true
-                                                }
-                                                _ => false,
-                                            }
-                                        }
-                                        _ => false,
-                                    },
-                                    _ => false,
-                                }
-                            ];
-                            true
                         }
                         _ => true,
                     }
