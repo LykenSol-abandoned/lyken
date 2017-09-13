@@ -59,10 +59,20 @@ impl Printer {
         }
     }
 
-    fn dsl_field(&mut self, field: &Field) {
-        self.print_ident(field.name);
-        self.print_str(": ");
-        self.dsl_expr(&field.value);
+    fn dsl_config(&mut self, config: &Config) {
+        match *config {
+            Config::Field { name, ref value } => {
+                self.print_ident(name);
+                self.print_str(": ");
+                self.dsl_expr(value);
+            }
+            Config::EventHandler { name, ref block } => {
+                self.print_str("on ");
+                self.print_ident(name);
+                self.print_str(" ");
+                self.dart_statement(block);
+            }
+        }
     }
 
     fn dsl_ty(&mut self, ty: &Type) {
@@ -76,7 +86,7 @@ impl Printer {
             Expr::Instance {
                 ref path,
                 ref unnamed,
-                ref fields,
+                ref config,
             } => {
                 self.dart_qualified(path);
                 if !unnamed.is_empty() {
@@ -91,12 +101,12 @@ impl Printer {
                     self.exit();
                     self.print_str(")");
                 }
-                if !fields.is_empty() {
+                if !config.is_empty() {
                     self.print_str(" {");
                     self.enter();
-                    for (i, field) in fields.iter().enumerate() {
-                        self.dsl_field(field);
-                        if i < fields.len() - 1 {
+                    for (i, c) in config.iter().enumerate() {
+                        self.dsl_config(c);
+                        if i < config.len() - 1 {
                             self.print_str(", ");
                         }
                     }

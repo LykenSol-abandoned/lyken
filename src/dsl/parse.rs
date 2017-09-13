@@ -15,27 +15,37 @@ impl<'a> Parser<'a> {
             p.parse_ident().is_ok() && (p.eat_punctuation('(') || p.eat_punctuation('{'))
         }) {
             let name = self.parse_ident()?;
-            let (unnamed, fields) = if self.eat_punctuation('(') {
+            let unnamed = if self.eat_punctuation('(') {
                 let unnamed = self.parse_one_or_more(',', |p| p.dsl_expr())?;
                 self.expect_punctuation(')')?;
-                let fields = if self.eat_punctuation('{') {
-                    let fields = self.dsl_fields()?;
-                    self.expect_punctuation('}')?;
-                    fields
-                } else {
-                    vec![]
-                };
-                (unnamed, fields)
+                unnamed
+            } else {
+                vec![]
+            };
+            let has_config = if !unnamed.is_empty() {
+                self.eat_punctuation('{')
             } else {
                 self.expect_punctuation('{')?;
-                let fields = self.dsl_fields()?;
-                self.expect_punctuation('}')?;
-                (vec![], fields)
+                true
             };
+            let mut config = vec![];
+            if has_config {
+                while !self.out_of_tokens() {
+                    if self.is_punctuation('}') {
+                        break;
+                    }
+                    config.push(self.dsl_config()?);
+                    if !self.eat_punctuation(',') {
+                        break;
+                    }
+                }
+                self.expect_punctuation('}')?;
+            }
+
             return Ok(Node::new(Expr::Instance {
                 path: dart::ast::Qualified::one(name, vec![]),
                 unnamed,
-                fields,
+                config,
             }));
         }
         if self.eat_punctuation('[') {
@@ -52,27 +62,20 @@ impl<'a> Parser<'a> {
         Ok(Node::new(Expr::Dart(self.dart_expr()?)))
     }
 
-    fn dsl_field(&mut self) -> ParseResult<Field> {
-        let name = self.parse_ident()?;
-        self.expect_punctuation(':')?;
-        Ok(Field {
-            name: name,
-            value: self.dsl_expr()?,
-        })
-    }
-
-    fn dsl_fields(&mut self) -> ParseResult<Vec<Field>> {
-        let mut fields = vec![];
-        while !self.out_of_tokens() {
-            if self.is_punctuation('}') {
-                break;
-            }
-            fields.push(self.dsl_field()?);
-            if !self.eat_punctuation(',') {
-                break;
-            }
+    fn dsl_config(&mut self) -> ParseResult<Config> {
+        if self.eat_keyword("on") {
+            Ok(Config::EventHandler {
+                name: self.parse_ident()?,
+                block: self.dart_block()?,
+            })
+        } else {
+            let name = self.parse_ident()?;
+            self.expect_punctuation(':')?;
+            Ok(Config::Field {
+                name,
+                value: self.dsl_expr()?,
+            })
         }
-        Ok(fields)
     }
 
     fn dsl_field_def(&mut self) -> ParseResult<Node<FieldDef>> {

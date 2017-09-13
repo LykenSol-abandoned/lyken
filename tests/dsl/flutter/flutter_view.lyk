@@ -38,10 +38,6 @@ def MyHomePage {
     return _emptyMessage;
   }
 
-  void _sendFlutterIncrement() {
-    platform.send(_pong);
-  }
-
   ..Scaffold {
     body: Column {
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,7 +67,9 @@ def MyHomePage {
       ],
     },
     floatingActionButton: FloatingActionButton {
-      onPressed: _sendFlutterIncrement,
+      on pressed {
+        platform.send(_pong);
+      },
       child: Icon(Icons.add),
     },
   }

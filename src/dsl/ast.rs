@@ -22,9 +22,12 @@ pub struct FieldDef {
 }
 
 #[derive(Debug)]
-pub struct Field {
-    pub name: Symbol,
-    pub value: Node<Expr>,
+pub enum Config {
+    Field { name: Symbol, value: Node<Expr> },
+    EventHandler {
+        name: Symbol,
+        block: Node<dart::ast::Statement>,
+    },
 }
 
 #[derive(Debug)]
@@ -37,7 +40,7 @@ pub enum Expr {
     Instance {
         path: Node<dart::ast::Qualified>,
         unnamed: Vec<Node<Expr>>,
-        fields: Vec<Field>,
+        config: Vec<Config>,
     },
     Array(Vec<Node<Expr>>),
     Dart(Node<dart::ast::Expr>),

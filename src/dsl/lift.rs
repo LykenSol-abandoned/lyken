@@ -435,28 +435,28 @@ impl Lifter {
                 if !path.params.is_empty() {
                     return Node::new(ast::Expr::Dart(expr));
                 }
-                let mut fields = vec![];
-                let mut unnamed = vec![];
 
+                let mut unnamed = vec![];
                 for arg in &args.unnamed {
                     unnamed.push(self.lift_expr(arg.clone()));
                 }
 
+                let mut config = vec![];
                 for arg in &args.named {
-                    fields.push(self.lift_field(arg));
+                    config.push(self.lift_config(arg));
                 }
                 Node::new(ast::Expr::Instance {
                     path: path.clone(),
                     unnamed,
-                    fields,
+                    config,
                 })
             }
             _ => Node::new(ast::Expr::Dart(expr)),
         }
     }
 
-    fn lift_field(&mut self, field: &NamedArg) -> ast::Field {
-        ast::Field {
+    fn lift_config(&mut self, field: &NamedArg) -> ast::Config {
+        ast::Config::Field {
             name: field.name,
             value: self.lift_expr(field.expr.clone()),
         }
