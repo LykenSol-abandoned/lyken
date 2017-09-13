@@ -1574,7 +1574,6 @@ impl<'a> Parser<'a> {
             }));
         }
 
-        let _external = self.eat_keyword("external");
         let abstract_ = self.eat_keyword("abstract");
         if self.eat_keyword("class") {
             let class_name = self.parse_ident()?;
