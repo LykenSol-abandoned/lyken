@@ -17,11 +17,11 @@ def BasicAppBarSample {
         actions: [
           IconButton { // action button
             icon: Icon(choices[0].icon),
-            onPressed: () { _select(choices[0]); },
+            on pressed { _select(choices[0]); },
           },
           IconButton { // action button
             icon: Icon(choices[1].icon),
-            onPressed: () { _select(choices[1]); },
+            on pressed { _select(choices[1]); },
           },
           PopupMenuButton { // overflow menu
             onSelected: _select,

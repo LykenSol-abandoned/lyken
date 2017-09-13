@@ -306,7 +306,7 @@ impl Printer {
         }
     }
 
-    fn dart_statement(&mut self, statement: &Statement) {
+    pub fn dart_statement(&mut self, statement: &Statement) {
         match *statement {
             Statement::Block(ref statements) => {
                 self.print_str("{");

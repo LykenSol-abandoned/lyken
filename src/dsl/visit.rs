@@ -1,6 +1,6 @@
 use dart;
 use dart::visit::Visit as DartVisit;
-use dsl::ast::{Expr, Field, FieldDef, Item, Type};
+use dsl::ast::{Config, Expr, FieldDef, Item, Type};
 use node::Node;
 
 pub trait Visitor: dart::visit::Visitor {
@@ -13,8 +13,8 @@ pub trait Visitor: dart::visit::Visitor {
     fn dsl_field_def(&mut self, field_def: Node<FieldDef>) {
         field_def.walk(self)
     }
-    fn dsl_field(&mut self, field: &Field) {
-        field.walk(self)
+    fn dsl_config(&mut self, config: &Config) {
+        config.walk(self)
     }
     fn dsl_type(&mut self, ty: Node<Type>) {
         ty.walk(self)
@@ -83,12 +83,19 @@ impl Visit for Node<FieldDef> {
     }
 }
 
-impl Visit for Field {
+impl Visit for Config {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
-        visitor.dsl_field(self);
+        visitor.dsl_config(self);
     }
     fn walk<V: Visitor>(&self, visitor: &mut V) {
-        self.value.visit(visitor);
+        match *self {
+            Config::Field { ref value, .. } => {
+                value.visit(visitor);
+            }
+            Config::EventHandler { ref block, .. } => {
+                block.visit(visitor);
+            }
+        }
     }
 }
 
@@ -114,15 +121,15 @@ impl Visit for Node<Expr> {
             Expr::Instance {
                 ref path,
                 ref unnamed,
-                ref fields,
+                ref config,
                 ..
             } => {
                 path.visit(visitor);
                 for arg in unnamed {
                     arg.visit(visitor);
                 }
-                for field in fields {
-                    field.visit(visitor);
+                for conf in config {
+                    conf.visit(visitor);
                 }
             }
             Expr::Array(ref expressions) => for expr in expressions {

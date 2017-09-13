@@ -270,10 +270,26 @@ impl Lowerer {
         })
     }
 
-    fn lower_field(&mut self, field: &Field) -> ast::NamedArg {
-        ast::NamedArg {
-            name: field.name,
-            expr: self.lower_expr(&field.value),
+    fn lower_config(&mut self, config: &Config) -> ast::NamedArg {
+        match *config {
+            Config::Field { name, ref value } => ast::NamedArg {
+                name,
+                expr: self.lower_expr(value),
+            },
+            Config::EventHandler { name, ref block } => {
+                let mut field_name = String::from("on");
+                let name = name.as_str();
+                let mut name = name.chars();
+                field_name.extend(name.next().unwrap().to_uppercase());
+                field_name.extend(name);
+                ast::NamedArg {
+                    name: Symbol::intern(&field_name),
+                    expr: Node::new(ast::Expr::Closure(
+                        ast::FnSig::default(),
+                        ast::FnBody::Block(block.clone()),
+                    )),
+                }
+            }
         }
     }
 
@@ -282,10 +298,13 @@ impl Lowerer {
             Expr::Instance {
                 ref path,
                 ref unnamed,
-                ref fields,
+                ref config,
             } => {
                 let unnamed = unnamed.iter().map(|expr| self.lower_expr(expr)).collect();
-                let named = fields.iter().map(|field| self.lower_field(field)).collect();
+                let named = config
+                    .iter()
+                    .map(|config| self.lower_config(config))
+                    .collect();
                 Node::new(ast::Expr::New {
                     const_: false,
                     path: path.clone(),

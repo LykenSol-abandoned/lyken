@@ -935,7 +935,7 @@ impl<'a> Parser<'a> {
         Ok(VarType { fcv, ty })
     }
 
-    fn dart_block(&mut self) -> ParseResult<Node<Statement>> {
+    pub fn dart_block(&mut self) -> ParseResult<Node<Statement>> {
         self.expect_punctuation('{')?;
         let mut statements = vec![];
         if self.skip_blocks {
