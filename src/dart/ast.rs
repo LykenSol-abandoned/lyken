@@ -76,12 +76,12 @@ impl Module {
                 let parent = self.parent.clone();
                 node.parent_any().set(parent.clone());
                 self.parent = node.clone();
-                node.walk(self);
+                node.super_visit(self);
                 self.parent = parent;
             }
         }
 
-        module.walk(&mut Parenter {
+        module.super_visit(&mut Parenter {
             parent: module.clone(),
         });
 
@@ -140,13 +140,13 @@ pub enum Item {
     Vars(Meta, VarType, Vec<Node<VarDef>>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ImportFilter {
     pub hide: bool,
     pub names: Vec<Symbol>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Import {
     pub uri: StringLiteral,
     pub deferred: bool,
@@ -420,13 +420,13 @@ pub enum Expr {
     Cascade(Node<Expr>, Cascade),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SymbolLiteral {
     Op(OverloadedOp),
     Path(Vec<Symbol>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct StringLiteral {
     pub raw: bool,
     pub triple: bool,
@@ -519,7 +519,7 @@ pub enum FnBody {
     Native(Option<StringLiteral>),
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum OptionalArgKind {
     Positional,
     Named,

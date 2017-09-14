@@ -8,80 +8,80 @@ pub trait Visitor: Sized {
         VisitNode::visit(node, self)
     }
     fn dart_module(&mut self, module: Node<Module>) {
-        module.walk(self)
+        module.super_visit(self)
     }
     fn dart_item(&mut self, item: Node<Item>) {
-        item.walk(self)
+        item.super_visit(self)
     }
     fn dart_class_member(&mut self, class_member: Node<ClassMember>) {
-        class_member.walk(self)
+        class_member.super_visit(self)
     }
     fn dart_constructor_initializer(&mut self, initializer: &ConstructorInitializer) {
-        initializer.walk(self)
+        initializer.super_visit(self)
     }
     fn dart_meta(&mut self, meta: &Meta) {
-        meta.walk(self)
+        meta.super_visit(self)
     }
     fn dart_qualified(&mut self, qualified: Node<Qualified>) {
-        qualified.walk(self)
+        qualified.super_visit(self)
     }
     fn dart_generics(&mut self, generics: &[Node<TypeParameter>]) {
-        generics.walk(self)
+        generics.super_visit(self)
     }
     fn dart_type(&mut self, ty: Node<Type>) {
-        ty.walk(self)
+        ty.super_visit(self)
     }
     fn dart_function(&mut self, function: Node<Function>) {
-        function.walk(self)
+        function.super_visit(self)
     }
     fn dart_fn_sig(&mut self, sig: &FnSig) {
-        sig.walk(self)
+        sig.super_visit(self)
     }
     fn dart_fn_body(&mut self, fn_body: &FnBody) {
-        fn_body.walk(self)
+        fn_body.super_visit(self)
     }
     fn dart_try_part(&mut self, try_part: &TryPart) {
-        try_part.walk(self)
+        try_part.super_visit(self)
     }
     fn dart_statement(&mut self, statement: Node<Statement>) {
-        statement.walk(self)
+        statement.super_visit(self)
     }
     fn dart_block(&mut self, statements: &[Node<Statement>]) {
-        statements.walk(self)
+        statements.super_visit(self)
     }
     fn dart_var_def(&mut self, var: Node<VarDef>) {
-        var.walk(self)
+        var.super_visit(self)
     }
     fn dart_expr(&mut self, expr: Node<Expr>) {
-        expr.walk(self)
+        expr.super_visit(self)
     }
     fn dart_args(&mut self, args: &Args) {
-        args.walk(self)
+        args.super_visit(self)
     }
     fn dart_suffix(&mut self, suffix: &Suffix) {
-        suffix.walk(self)
+        suffix.super_visit(self)
     }
     fn dart_string_literal(&mut self, string_literal: &StringLiteral) {
-        string_literal.walk(self)
+        string_literal.super_visit(self)
     }
 }
 
 pub trait Visit {
     fn visit<V: Visitor>(&self, visitor: &mut V);
-    fn walk<V: Visitor>(&self, visitor: &mut V);
+    fn super_visit<V: Visitor>(&self, visitor: &mut V);
 }
 
 pub trait VisitNode: 'static {
     fn visit<V: Visitor>(node: Node<Self>, visitor: &mut V);
-    fn walk<V: Visitor>(node: Node<Self>, visitor: &mut V);
+    fn super_visit<V: Visitor>(node: Node<Self>, visitor: &mut V);
 }
 
 impl<T: VisitNode> Visit for Node<T> {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.visit_node(self.clone());
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
-        VisitNode::walk(self.clone(), visitor)
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
+        VisitNode::super_visit(self.clone(), visitor)
     }
 }
 
@@ -90,7 +90,7 @@ impl VisitNode for Module {
         visitor.dart_module(module);
     }
 
-    fn walk<V: Visitor>(module: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(module: Node<Self>, visitor: &mut V) {
         for item in &module.items {
             item.visit(visitor);
         }
@@ -101,7 +101,7 @@ impl VisitNode for Item {
     fn visit<V: Visitor>(item: Node<Self>, visitor: &mut V) {
         visitor.dart_item(item);
     }
-    fn walk<V: Visitor>(item: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(item: Node<Self>, visitor: &mut V) {
         match *item {
             Item::LibraryName { ref meta, .. } | Item::PartOf { ref meta, .. } => {
                 meta.visit(visitor);
@@ -206,7 +206,7 @@ impl VisitNode for ClassMember {
     fn visit<V: Visitor>(class_member: Node<Self>, visitor: &mut V) {
         visitor.dart_class_member(class_member);
     }
-    fn walk<V: Visitor>(class_member: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(class_member: Node<Self>, visitor: &mut V) {
         match *class_member {
             ClassMember::Comments(_) => {}
             ClassMember::Redirect {
@@ -259,7 +259,7 @@ impl Visit for ConstructorInitializer {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_constructor_initializer(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         match *self {
             ConstructorInitializer::Super(_, ref args) |
             ConstructorInitializer::This(_, ref args) |
@@ -277,7 +277,7 @@ impl Visit for Meta {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_meta(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         for meta_item in self {
             match *meta_item {
                 MetaItem::Attribute {
@@ -299,7 +299,7 @@ impl VisitNode for Qualified {
     fn visit<V: Visitor>(qualified: Node<Self>, visitor: &mut V) {
         visitor.dart_qualified(qualified);
     }
-    fn walk<V: Visitor>(qualified: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(qualified: Node<Self>, visitor: &mut V) {
         if let Some(ref prefix) = qualified.prefix {
             prefix.visit(visitor);
         }
@@ -313,7 +313,7 @@ impl Visit for [Node<TypeParameter>] {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_generics(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         for generic in self {
             if let Some(ref extension) = generic.extends {
                 extension.visit(visitor);
@@ -326,7 +326,7 @@ impl VisitNode for Type {
     fn visit<V: Visitor>(ty: Node<Self>, visitor: &mut V) {
         visitor.dart_type(ty);
     }
-    fn walk<V: Visitor>(ty: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(ty: Node<Self>, visitor: &mut V) {
         match *ty {
             Type::Path(ref qualified) => {
                 qualified.visit(visitor);
@@ -343,7 +343,7 @@ impl VisitNode for Function {
     fn visit<V: Visitor>(function: Node<Self>, visitor: &mut V) {
         visitor.dart_function(function);
     }
-    fn walk<V: Visitor>(function: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(function: Node<Self>, visitor: &mut V) {
         function.generics.visit(visitor);
         function.sig.visit(visitor);
         if let Some(ref body) = function.body {
@@ -356,7 +356,7 @@ impl Visit for FnSig {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_fn_sig(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         self.return_type.visit(visitor);
         for arg in &self.required {
             arg.ty.ty.visit(visitor);
@@ -373,7 +373,7 @@ impl Visit for FnBody {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_fn_body(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         match *self {
             FnBody::Arrow(ref expr) => {
                 expr.visit(visitor);
@@ -393,7 +393,7 @@ impl Visit for TryPart {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_try_part(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         if let Some(ref on) = self.on {
             on.visit(visitor);
         }
@@ -411,7 +411,7 @@ impl VisitNode for Statement {
     fn visit<V: Visitor>(statement: Node<Self>, visitor: &mut V) {
         visitor.dart_statement(statement);
     }
-    fn walk<V: Visitor>(statement: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(statement: Node<Self>, visitor: &mut V) {
         match *statement {
             Statement::Comments(_, ref statement) => if let Some(ref statement) = *statement {
                 statement.visit(visitor);
@@ -507,7 +507,7 @@ impl Visit for [Node<Statement>] {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_block(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         for statement in self {
             statement.visit(visitor);
         }
@@ -518,7 +518,7 @@ impl VisitNode for VarDef {
     fn visit<V: Visitor>(var_def: Node<Self>, visitor: &mut V) {
         visitor.dart_var_def(var_def);
     }
-    fn walk<V: Visitor>(var_def: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(var_def: Node<Self>, visitor: &mut V) {
         if let Some(ref init) = var_def.init {
             init.visit(visitor);
         }
@@ -529,7 +529,7 @@ impl VisitNode for Expr {
     fn visit<V: Visitor>(expr: Node<Self>, visitor: &mut V) {
         visitor.dart_expr(expr);
     }
-    fn walk<V: Visitor>(expr: Node<Self>, visitor: &mut V) {
+    fn super_visit<V: Visitor>(expr: Node<Self>, visitor: &mut V) {
         match *expr {
             Expr::Comments(_, ref expr) => {
                 expr.visit(visitor);
@@ -617,7 +617,7 @@ impl Visit for Args {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_args(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         for arg in &self.unnamed {
             arg.visit(visitor);
         }
@@ -631,7 +631,7 @@ impl Visit for Suffix {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_suffix(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         match *self {
             Suffix::Index(ref expr) => {
                 expr.visit(visitor);
@@ -652,7 +652,7 @@ impl Visit for StringLiteral {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
         visitor.dart_string_literal(self);
     }
-    fn walk<V: Visitor>(&self, visitor: &mut V) {
+    fn super_visit<V: Visitor>(&self, visitor: &mut V) {
         for &(ref expr, _) in &self.interpolated {
             expr.visit(visitor);
         }

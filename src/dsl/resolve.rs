@@ -17,14 +17,14 @@ pub fn resolve(items: &[Node<Item>], fully_resolve: bool) {
 
     collector.import(None, "dart:core", &[], None);
 
-    items.walk(collector);
+    items.super_visit(collector);
     if collector.has_error {
         return;
     }
 
-    items.walk(&mut TopLevelResolver { collector });
+    items.super_visit(&mut TopLevelResolver { collector });
     if fully_resolve {
-        items.walk(&mut Resolver { collector });
+        items.super_visit(&mut Resolver { collector });
     }
 }
 
@@ -56,9 +56,9 @@ impl<'a> Visitor for Resolver<'a> {
     fn dsl_item(&mut self, item: Node<Item>) {
         self.in_lexical_scope(|this| {
             if let Item::ComponentDef { .. } = *item {
-                item.walk(this.collector);
+                item.super_visit(this.collector);
             }
-            item.walk(this);
+            item.super_visit(this);
         });
     }
 }
