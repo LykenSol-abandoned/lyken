@@ -129,7 +129,7 @@ impl<T: VisitNode> Node<T> {
                 _ => {}
             }
         }
-        self.walk(&mut collector);
+        self.super_visit(&mut collector);
         self.cached_exports().set(collector.scope.clone());
         collector.scope
     }
@@ -144,14 +144,14 @@ pub fn resolve(module: Node<Module>, fully_resolve: bool) {
         collector.import(None, "dart:core", &[], None);
     }
 
-    module.walk(collector);
+    module.super_visit(collector);
     if collector.has_error {
         return;
     }
 
-    module.walk(&mut TopLevelResolver { collector });
+    module.super_visit(&mut TopLevelResolver { collector });
     if fully_resolve {
-        module.walk(&mut Resolver { collector });
+        module.super_visit(&mut Resolver { collector });
     }
 }
 
@@ -238,7 +238,7 @@ impl Visitor for Collector {
                 var.visit(self);
             },
             Item::Part { ref module, .. } => {
-                module.walk(self);
+                module.super_visit(self);
             }
             Item::Export(_, ref uri, ref filters) => if self.exports_only {
                 self.import(item.root_module(), &uri.get_simple_string(), filters, None);
@@ -365,31 +365,31 @@ impl<'a> Visitor for Resolver<'a> {
                     }
                 }
 
-                item.walk(this.collector);
+                item.super_visit(this.collector);
             }
-            item.walk(this);
+            item.super_visit(this);
         });
     }
     fn dart_function(&mut self, function: Node<Function>) {
         function.visit(self.collector);
-        self.in_lexical_scope(|this| function.walk(this));
+        self.in_lexical_scope(|this| function.super_visit(this));
     }
     fn dart_try_part(&mut self, try_part: &TryPart) {
-        self.in_lexical_scope(|this| try_part.walk(this));
+        self.in_lexical_scope(|this| try_part.super_visit(this));
     }
     fn dart_statement(&mut self, statement: Node<Statement>) {
         if let Statement::For(_, ForLoop::InVar(..), _) = *statement {
-            self.in_lexical_scope(|this| statement.walk(this));
+            self.in_lexical_scope(|this| statement.super_visit(this));
         } else {
-            statement.walk(self);
+            statement.super_visit(self);
         }
     }
     fn dart_block(&mut self, statements: &[Node<Statement>]) {
-        self.in_lexical_scope(|this| statements.walk(this));
+        self.in_lexical_scope(|this| statements.super_visit(this));
     }
     fn dart_var_def(&mut self, var: Node<VarDef>) {
         var.visit(self.collector);
-        var.walk(self);
+        var.super_visit(self);
     }
     fn dart_expr(&mut self, expr: Node<Expr>) {
         if expr.res().get().is_some() {
@@ -403,7 +403,7 @@ impl<'a> Visitor for Resolver<'a> {
             }
             expr.res().set(res);
         }
-        expr.walk(self)
+        expr.super_visit(self)
     }
     fn dart_qualified(&mut self, qualified: Node<Qualified>) {
         for ty in &qualified.params {
@@ -431,6 +431,6 @@ impl<'a> Visitor for Resolver<'a> {
             self.collector
                 .record(generic.name, Res::TypeParameter(generic.clone()));
         }
-        generics.walk(self)
+        generics.super_visit(self)
     }
 }
