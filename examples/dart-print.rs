@@ -1,3 +1,5 @@
+#![feature(rustc_private)]
+
 extern crate lyken;
 extern crate walkdir;
 
@@ -15,24 +17,35 @@ fn main() {
             match Parser::new(entry.path(), &tokens).dart_module() {
                 Ok(module) => {
                     let result = Printer::new().dart_items(&module.items);
-                    let mut old = tokens.iter().filter(|&&(_, token)| !token.is_whitespace());
-                    let mut new = result.iter().filter(|token| !token.is_whitespace());
+
+                    fn whitespace_not_comment(token: &Token) -> bool {
+                        match *token {
+                            Token::WhiteSpace(_) => true,
+                            _ => false,
+                        }
+                    }
+
+                    let mut old = tokens
+                        .iter()
+                        .filter(|&&(_, token)| !whitespace_not_comment(&token));
+                    let mut new = result.iter().filter(|token| !whitespace_not_comment(token));
                     loop {
-                        match (old.next(), new.next()) {
+                        let (old, new) = match (old.next(), new.next()) {
                             (
                                 Some(&(_, Token::Punctuation(','))),
-                                Some(&Token::Punctuation(')')),
+                                new @ Some(&Token::Punctuation(')')),
                             ) |
                             (
                                 Some(&(_, Token::Punctuation(','))),
-                                Some(&Token::Punctuation(']')),
+                                new @ Some(&Token::Punctuation(']')),
                             ) |
                             (
                                 Some(&(_, Token::Punctuation(','))),
-                                Some(&Token::Punctuation('}')),
-                            ) => {
-                                old.next();
-                            }
+                                new @ Some(&Token::Punctuation('}')),
+                            ) => (old.next(), new),
+                            x => x,
+                        };
+                        match (old, new) {
                             (Some(&(span, old)), Some(new)) => {
                                 if old.to_string() != new.to_string() {
                                     println!("{:?}: `{}` != `{}`", span, old, new);
@@ -53,7 +66,6 @@ fn main() {
                 }
                 Err(error) => {
                     println!("{}", error);
-                    std::process::exit(1);
                 }
             }
         }

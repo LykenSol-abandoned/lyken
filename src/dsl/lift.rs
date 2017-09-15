@@ -49,14 +49,25 @@ impl Class {
                             return true;
                         }
                     }
-                    require![
-                        meta.len() == 1,
-                        meta[0].qualified.prefix.is_none(),
-                        meta[0].qualified.name == "override",
-                        meta[0].arguments.is_none(),
-                        qualif.is_empty(),
-                        function.generics.is_empty()
-                    ];
+                    require![meta.len() == 1];
+                    match meta[0] {
+                        MetaItem::Attribute {
+                            ref qualified,
+                            ref arguments,
+                        } => {
+                            require![
+                                qualified.prefix.is_none(),
+                                qualified.name == "override",
+                                arguments.is_none(),
+                                qualif.is_empty(),
+                                function.generics.is_empty()
+                            ];
+                        }
+                        MetaItem::Comments(_) => {
+                            require![false];
+                        }
+                    }
+
                     if let Some(FnBody::Block(ref stm)) = function.body {
                         if let Statement::Block(ref stm) = **stm {
                             if stm.len() == 1 {
@@ -186,7 +197,7 @@ impl Lifter {
         }
         match *item.clone() {
             Item::Class {
-                ref metadata,
+                ref meta,
                 abstract_: false,
                 name,
                 ref generics,
@@ -196,7 +207,7 @@ impl Lifter {
                 ref members,
             } => {
                 require![
-                    metadata.is_empty(),
+                    meta.is_empty(),
                     generics.is_empty(),
                     mixins.is_empty(),
                     interfaces.is_empty()
@@ -246,13 +257,13 @@ impl Lifter {
                     require![!failed];
                     match *member.clone() {
                         ClassMember::Fields {
-                            ref metadata,
+                            ref meta,
                             static_: false,
                             ref var_type,
                             ref initializers,
                         } => {
                             require![
-                                metadata.is_empty(),
+                                meta.is_empty(),
                                 var_type.fcv != Some(FinalConstVar::Const),
                                 initializers.len() >= 1
                             ];
@@ -303,7 +314,7 @@ impl Lifter {
                             return true;
                         }
                         ClassMember::Constructor {
-                            ref metadata,
+                            ref meta,
                             ref method_qualifiers,
                             name: None,
                             ref sig,
@@ -311,7 +322,7 @@ impl Lifter {
                             function_body: None,
                         } => {
                             require![
-                                metadata.is_empty(),
+                                meta.is_empty(),
                                 method_qualifiers.len() == 1,
                                 method_qualifiers[0] == MethodQualifiers::Const,
                                 match *sig.return_type {
@@ -343,7 +354,7 @@ impl Lifter {
                                 match class.kind {
                                     ClassKind::StatelessWidget => {
                                         sig.optional.len() == pub_fields + 1 &&
-                                            sig.optional[0].metadata.is_empty() &&
+                                            sig.optional[0].meta.is_empty() &&
                                             !sig.optional[0].covariant &&
                                             !sig.optional[0].field &&
                                             sig.optional[0].var.name == "key" &&
@@ -371,7 +382,7 @@ impl Lifter {
                                     _ => {}
                                 }
                                 require![
-                                    arg.metadata.is_empty(),
+                                    arg.meta.is_empty(),
                                     !arg.covariant,
                                     arg.field,
                                     !arg.var.name.as_str().starts_with('_'),

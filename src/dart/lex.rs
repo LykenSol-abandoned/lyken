@@ -11,6 +11,7 @@ use syntax::codemap::{BytePos, FileMap, Pos, Span};
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Token {
     WhiteSpace(Span),
+    Comment(Span),
     Punctuation(char),
     Identifier(Symbol),
     IntegerLiteral(Symbol),
@@ -27,7 +28,9 @@ pub enum Token {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Token::WhiteSpace(s) => write!(f, "{}", ::codemap().span_to_snippet(s).unwrap()),
+            Token::WhiteSpace(s) | Token::Comment(s) => {
+                write!(f, "{}", ::codemap().span_to_snippet(s).unwrap())
+            }
             Token::IntegerLiteral(s) | Token::Identifier(s) => write!(f, "{}", s),
             Token::Punctuation(c) => write!(f, "{}", c),
             Token::StringLiteral {
@@ -75,7 +78,7 @@ impl Token {
 
     pub fn is_whitespace(&self) -> bool {
         match *self {
-            Token::WhiteSpace(_) => true,
+            Token::WhiteSpace(_) | Token::Comment(_) => true,
             _ => false,
         }
     }
@@ -207,9 +210,9 @@ impl Lexer {
             } else {
                 bump!(or emit!(ErrorMsg::UnterminatedShebang));
                 while self.c != '\n' {
-                    bump!(or put!(Token::WhiteSpace(span)));
+                    bump!(or put!(Token::Comment(span)));
                 }
-                put!(Token::WhiteSpace(span));
+                put!(Token::Comment(span));
             }
         }
 
@@ -254,9 +257,9 @@ impl Lexer {
                 bump!(or put!(Token::Punctuation (self.c)));
                 if self.c == '/' {
                     while self.c != '\n' {
-                        bump!(or put!(Token::WhiteSpace(span)));
+                        bump!(or put!(Token::Comment(span)));
                     }
-                    put!(Token::WhiteSpace(span));
+                    put!(Token::Comment(span));
                 } else if self.c == '*' {
                     let mut depth = 0;
                     bump!(or emit!(ErrorMsg::UnterminatedBlockComment));
@@ -282,8 +285,8 @@ impl Lexer {
 
                         bump!(or emit!(ErrorMsg::UnterminatedBlockComment));
                     }
-                    bump!(or put!(Token::WhiteSpace(span)));
-                    put!(Token::WhiteSpace(span));
+                    bump!(or put!(Token::Comment(span)));
+                    put!(Token::Comment(span));
                 } else {
                     put!(Token::Punctuation('/'));
                 }
