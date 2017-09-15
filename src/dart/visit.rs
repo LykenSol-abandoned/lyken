@@ -1,6 +1,6 @@
 use dart::ast::{Args, ClassMember, ConstructorInitializer, Expr, FnBody, FnSig, ForLoop, Function,
-                Item, Metadata, Module, Qualified, Statement, StringLiteral, Suffix, TryPart,
-                Type, TypeParameter, VarDef};
+                Item, Meta, MetaItem, Module, Qualified, Statement, StringLiteral, Suffix,
+                TryPart, Type, TypeParameter, VarDef};
 use node::Node;
 
 pub trait Visitor: Sized {
@@ -19,8 +19,8 @@ pub trait Visitor: Sized {
     fn dart_constructor_initializer(&mut self, initializer: &ConstructorInitializer) {
         initializer.walk(self)
     }
-    fn dart_metadata(&mut self, metadata: &Metadata) {
-        metadata.walk(self)
+    fn dart_meta(&mut self, meta: &Meta) {
+        meta.walk(self)
     }
     fn dart_qualified(&mut self, qualified: Node<Qualified>) {
         qualified.walk(self)
@@ -103,30 +103,28 @@ impl VisitNode for Item {
     }
     fn walk<V: Visitor>(item: Node<Self>, visitor: &mut V) {
         match *item {
-            Item::LibraryName { ref metadata, .. } |
-            Item::PartOf { ref metadata, .. } |
-            Item::Enum { ref metadata, .. } => {
-                metadata.visit(visitor);
+            Item::LibraryName { ref meta, .. } | Item::PartOf { ref meta, .. } => {
+                meta.visit(visitor);
             }
-            Item::Import(ref metadata, ref import) => {
-                metadata.visit(visitor);
+            Item::Import(ref meta, ref import) => {
+                meta.visit(visitor);
                 import.uri.visit(visitor);
             }
-            Item::Export(ref metadata, ref string_literal, _) => {
-                metadata.visit(visitor);
+            Item::Export(ref meta, ref string_literal, _) => {
+                meta.visit(visitor);
                 string_literal.visit(visitor);
             }
             Item::Part {
-                ref metadata,
+                ref meta,
                 ref uri,
                 ref module,
             } => {
-                metadata.visit(visitor);
+                meta.visit(visitor);
                 uri.visit(visitor);
                 module.visit(visitor);
             }
             Item::Class {
-                ref metadata,
+                ref meta,
                 ref generics,
                 ref superclass,
                 ref mixins,
@@ -134,7 +132,7 @@ impl VisitNode for Item {
                 ref members,
                 ..
             } => {
-                metadata.visit(visitor);
+                meta.visit(visitor);
                 generics.visit(visitor);
                 if let Some(ref superclass) = *superclass {
                     superclass.visit(visitor);
@@ -150,13 +148,13 @@ impl VisitNode for Item {
                 }
             }
             Item::MixinClass {
-                ref metadata,
+                ref meta,
                 ref generics,
                 ref mixins,
                 ref interfaces,
                 ..
             } => {
-                metadata.visit(visitor);
+                meta.visit(visitor);
                 generics.visit(visitor);
                 for mixin in mixins {
                     mixin.visit(visitor);
@@ -165,26 +163,36 @@ impl VisitNode for Item {
                     interface.visit(visitor);
                 }
             }
+            Item::Enum {
+                ref meta,
+                ref values,
+                ..
+            } => {
+                meta.visit(visitor);
+                for &(ref meta, _) in values {
+                    meta.visit(visitor);
+                }
+            }
             Item::TypeAlias {
-                ref metadata,
+                ref meta,
                 ref generics,
                 ref ty,
                 ..
             } => {
-                metadata.visit(visitor);
+                meta.visit(visitor);
                 generics.visit(visitor);
                 ty.visit(visitor);
             }
             Item::Function {
-                ref metadata,
+                ref meta,
                 ref function,
                 ..
             } => {
-                metadata.visit(visitor);
+                meta.visit(visitor);
                 function.visit(visitor);
             }
-            Item::Vars(ref metadata, ref var_type, ref vars) => {
-                metadata.visit(visitor);
+            Item::Vars(ref meta, ref var_type, ref vars) => {
+                meta.visit(visitor);
                 var_type.ty.visit(visitor);
                 for var in vars {
                     var.visit(visitor);
@@ -200,24 +208,25 @@ impl VisitNode for ClassMember {
     }
     fn walk<V: Visitor>(class_member: Node<Self>, visitor: &mut V) {
         match *class_member {
+            ClassMember::Comments(_) => {}
             ClassMember::Redirect {
-                ref metadata,
+                ref meta,
                 ref sig,
                 ref path,
                 ..
             } => {
-                metadata.visit(visitor);
+                meta.visit(visitor);
                 sig.visit(visitor);
                 path.visit(visitor);
             }
             ClassMember::Constructor {
-                ref metadata,
+                ref meta,
                 ref sig,
                 ref initializers,
                 ref function_body,
                 ..
             } => {
-                metadata.visit(visitor);
+                meta.visit(visitor);
                 sig.visit(visitor);
                 for initializer in initializers {
                     initializer.visit(visitor);
@@ -226,17 +235,17 @@ impl VisitNode for ClassMember {
                     function_body.visit(visitor);
                 }
             }
-            ClassMember::Method(ref metadata, _, ref function) => {
-                metadata.visit(visitor);
+            ClassMember::Method(ref meta, _, ref function) => {
+                meta.visit(visitor);
                 function.visit(visitor);
             }
             ClassMember::Fields {
-                ref metadata,
+                ref meta,
                 ref var_type,
                 ref initializers,
                 ..
             } => {
-                metadata.visit(visitor);
+                meta.visit(visitor);
                 var_type.ty.visit(visitor);
                 for field in initializers {
                     field.visit(visitor);
@@ -264,15 +273,23 @@ impl Visit for ConstructorInitializer {
     }
 }
 
-impl Visit for Metadata {
+impl Visit for Meta {
     fn visit<V: Visitor>(&self, visitor: &mut V) {
-        visitor.dart_metadata(self);
+        visitor.dart_meta(self);
     }
     fn walk<V: Visitor>(&self, visitor: &mut V) {
-        for metadata_item in self {
-            metadata_item.qualified.visit(visitor);
-            if let Some(ref arguments) = metadata_item.arguments {
-                arguments.visit(visitor);
+        for meta_item in self {
+            match *meta_item {
+                MetaItem::Attribute {
+                    ref qualified,
+                    ref arguments,
+                } => {
+                    qualified.visit(visitor);
+                    if let Some(ref arguments) = *arguments {
+                        arguments.visit(visitor);
+                    }
+                }
+                MetaItem::Comments(_) => {}
             }
         }
     }
@@ -396,6 +413,9 @@ impl VisitNode for Statement {
     }
     fn walk<V: Visitor>(statement: Node<Self>, visitor: &mut V) {
         match *statement {
+            Statement::Comments(_, ref statement) => if let Some(ref statement) = *statement {
+                statement.visit(visitor);
+            },
             Statement::Block(ref statements) => {
                 statements.visit(visitor);
             }
@@ -511,6 +531,9 @@ impl VisitNode for Expr {
     }
     fn walk<V: Visitor>(expr: Node<Self>, visitor: &mut V) {
         match *expr {
+            Expr::Comments(_, ref expr) => {
+                expr.visit(visitor);
+            }
             Expr::Unary(_, ref expr) => expr.visit(visitor),
             Expr::Binary(_, ref a, ref b) => {
                 a.visit(visitor);

@@ -103,11 +103,8 @@ impl Printer {
 
     pub fn dart_item(&mut self, item: &Item) {
         match *item {
-            Item::LibraryName {
-                ref metadata,
-                ref path,
-            } => {
-                self.dart_metadata(metadata);
+            Item::LibraryName { ref meta, ref path } => {
+                self.dart_meta(meta);
                 self.print_str("library ");
                 for (i, ident) in path.iter().enumerate() {
                     self.print_ident(*ident);
@@ -117,8 +114,8 @@ impl Printer {
                 }
                 self.print_str(";");
             }
-            Item::Import(ref metadata, ref import) => {
-                self.dart_metadata(metadata);
+            Item::Import(ref meta, ref import) => {
+                self.dart_meta(meta);
                 self.print_str("import ");
                 self.dart_string_lit(&import.uri);
                 if import.deferred == true {
@@ -136,8 +133,8 @@ impl Printer {
                 }
                 self.print_str(";");
             }
-            Item::Export(ref metadata, ref uri, ref combinators) => {
-                self.dart_metadata(metadata);
+            Item::Export(ref meta, ref uri, ref combinators) => {
+                self.dart_meta(meta);
                 self.print_str(" export ");
                 self.dart_string_lit(uri);
                 self.print_str(" ");
@@ -150,20 +147,17 @@ impl Printer {
                 self.print_str(";");
             }
             Item::Part {
-                ref metadata,
+                ref meta,
                 ref uri,
                 module: _,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 self.print_str("part ");
                 self.dart_string_lit(uri);
                 self.print_str(";");
             }
-            Item::PartOf {
-                ref metadata,
-                ref path,
-            } => {
-                self.dart_metadata(metadata);
+            Item::PartOf { ref meta, ref path } => {
+                self.dart_meta(meta);
                 self.print_str("part of ");
                 self.print_ident(path[0]);
                 for it in &path[1..] {
@@ -173,7 +167,7 @@ impl Printer {
                 self.print_str(";");
             }
             Item::Class {
-                ref metadata,
+                ref meta,
                 abstract_,
                 name,
                 ref generics,
@@ -182,7 +176,7 @@ impl Printer {
                 ref interfaces,
                 ref members,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 if abstract_ {
                     self.print_str("abstract ");
                 }
@@ -223,14 +217,14 @@ impl Printer {
                 self.print_str("}");
             }
             Item::MixinClass {
-                ref metadata,
+                ref meta,
                 abstract_,
                 name,
                 ref generics,
                 ref mixins,
                 ref interfaces,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 if abstract_ {
                     self.print_str("abstract ");
                 }
@@ -258,17 +252,18 @@ impl Printer {
                 self.print_str(";");
             }
             Item::Enum {
-                ref metadata,
+                ref meta,
                 name,
                 ref values,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 self.print_str("enum ");
                 self.print_ident(name);
                 self.print_str(" {");
                 self.enter();
-                for (i, value) in values.iter().enumerate() {
-                    self.print_ident(*value);
+                for (i, &(ref meta, value)) in values.iter().enumerate() {
+                    self.dart_meta(meta);
+                    self.print_ident(value);
                     if i < values.len() - 1 {
                         self.print_str(",");
                     }
@@ -277,29 +272,29 @@ impl Printer {
                 self.print_str("}");
             }
             Item::TypeAlias {
-                ref metadata,
+                ref meta,
                 name,
                 ref generics,
                 ref ty,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 self.print_str("typedef ");
                 self.dart_typed_name(ty, "", name, generics);
                 self.print_str(";");
             }
             Item::Function {
-                ref metadata,
+                ref meta,
                 external,
                 ref function,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 if external {
                     self.print_str("external ");
                 }
                 self.dart_function(function);
             }
-            Item::Vars(ref metadata, ref ty, ref vars) => {
-                self.dart_metadata(metadata);
+            Item::Vars(ref meta, ref ty, ref vars) => {
+                self.dart_meta(meta);
                 self.dart_vars(ty, vars);
                 self.print_str(";");
             }
@@ -308,6 +303,15 @@ impl Printer {
 
     pub fn dart_statement(&mut self, statement: &Statement) {
         match *statement {
+            Statement::Comments(ref comments, ref statement) => {
+                for &comment in comments {
+                    self.tokens.push(Token::Comment(comment));
+                    self.new_line();
+                }
+                if let Some(ref statement) = *statement {
+                    self.dart_statement(statement);
+                }
+            }
             Statement::Block(ref statements) => {
                 self.print_str("{");
                 self.enter();
@@ -490,6 +494,13 @@ impl Printer {
 
     pub fn dart_expr(&mut self, expr: &Expr) {
         match *expr {
+            Expr::Comments(ref comments, ref expr) => {
+                for &comment in comments {
+                    self.tokens.push(Token::Comment(comment));
+                    self.new_line();
+                }
+                self.dart_expr(expr);
+            }
             Expr::Unary(un_op, ref operand) => match un_op {
                 UnOp::PostDec | UnOp::PostInc => {
                     self.dart_expr(operand);
@@ -832,6 +843,10 @@ impl Printer {
     }
 
     fn dart_named_argurment(&mut self, arg: &NamedArg) {
+        for &comment in &arg.comments {
+            self.tokens.push(Token::Comment(comment));
+            self.new_line();
+        }
         self.print_ident(arg.name);
         self.print_str(": ");
         self.dart_expr(&arg.expr);
@@ -922,7 +937,7 @@ impl Printer {
     }
 
     fn dart_arg_def(&mut self, param: &ArgDef) {
-        self.dart_metadata(&param.metadata);
+        self.dart_meta(&param.meta);
         if param.covariant {
             self.print_str("covariant ");
         }
@@ -965,18 +980,29 @@ impl Printer {
         }
     }
 
-    fn dart_metadata(&mut self, metadata: &Metadata) {
-        for meta in metadata {
-            self.dart_metadata_item(meta);
+    fn dart_meta(&mut self, meta: &Meta) {
+        for meta in meta {
+            self.dart_meta_item(meta);
             self.new_line();
         }
     }
 
-    fn dart_metadata_item(&mut self, item: &MetadataItem) {
-        self.print_str("@");
-        self.dart_qualified(&item.qualified);
-        if let Some(ref args) = item.arguments {
-            self.dart_arguments(args);
+    fn dart_meta_item(&mut self, item: &MetaItem) {
+        match *item {
+            MetaItem::Attribute {
+                ref qualified,
+                ref arguments,
+            } => {
+                self.print_str("@");
+                self.dart_qualified(qualified);
+                if let Some(ref args) = *arguments {
+                    self.dart_arguments(args);
+                }
+            }
+            MetaItem::Comments(ref comments) => for &comment in comments {
+                self.tokens.push(Token::Comment(comment));
+                self.new_line();
+            },
         }
     }
 
@@ -995,7 +1021,7 @@ impl Printer {
     }
 
     fn dart_type_parameter(&mut self, param: &Node<TypeParameter>) {
-        self.dart_metadata(&param.metadata);
+        self.dart_meta(&param.meta);
         self.print_ident(param.name);
         if let Some(ref extends) = param.extends {
             self.print_str(" extends ");
@@ -1005,14 +1031,18 @@ impl Printer {
 
     pub fn dart_class_member(&mut self, member: &ClassMember, class_name: Symbol) {
         match *member {
+            ClassMember::Comments(ref comments) => for &comment in comments {
+                self.tokens.push(Token::Comment(comment));
+                self.new_line();
+            },
             ClassMember::Redirect {
-                ref metadata,
+                ref meta,
                 ref method_qualifiers,
                 name,
                 ref sig,
                 ref path,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 for qualifier in method_qualifiers {
                     self.dart_method_qualifier(qualifier);
                     self.print_str(" ");
@@ -1029,14 +1059,14 @@ impl Printer {
                 self.print_str(";");
             }
             ClassMember::Constructor {
-                ref metadata,
+                ref meta,
                 ref method_qualifiers,
                 name,
                 ref sig,
                 ref initializers,
                 ref function_body,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 for qualifier in method_qualifiers {
                     self.dart_method_qualifier(qualifier);
                     self.print_str(" ");
@@ -1065,8 +1095,8 @@ impl Printer {
                     self.print_str(";");
                 }
             }
-            ClassMember::Method(ref metadata, ref qualifiers, ref func) => {
-                self.dart_metadata(metadata);
+            ClassMember::Method(ref meta, ref qualifiers, ref func) => {
+                self.dart_meta(meta);
                 for qualifier in qualifiers {
                     self.dart_method_qualifier(qualifier);
                     self.print_str(" ");
@@ -1074,12 +1104,12 @@ impl Printer {
                 self.dart_function(func);
             }
             ClassMember::Fields {
-                ref metadata,
+                ref meta,
                 static_,
                 ref var_type,
                 ref initializers,
             } => {
-                self.dart_metadata(metadata);
+                self.dart_meta(meta);
                 if static_ {
                     self.print_str("static ");
                 }
@@ -1202,7 +1232,7 @@ impl Printer {
     fn token_size(&self, token: Token) -> usize {
         let mut size: usize = 0;
         match token {
-            Token::WhiteSpace(s) => for c in span_to_str(s).chars() {
+            Token::WhiteSpace(s) | Token::Comment(s) => for c in span_to_str(s).chars() {
                 size += UnicodeWidthChar::width(c).unwrap_or(1);
             },
             Token::IntegerLiteral(s) | Token::Identifier(s) => for c in s.as_str().chars() {
@@ -1241,7 +1271,7 @@ impl Printer {
     fn line_size(&self, tokens: &[Token], line_size: &mut usize) -> Option<usize> {
         for (i, it) in tokens.iter().enumerate() {
             match *it {
-                Token::WhiteSpace(s) => {
+                Token::WhiteSpace(s) | Token::Comment(s) => {
                     let s = span_to_str(s);
                     if s == "\n" {
                         return Some(i);

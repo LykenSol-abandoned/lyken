@@ -64,7 +64,7 @@ impl Lowerer {
                     );
 
                     class_members.push(Node::new(ast::ClassMember::Method(
-                        vec![ast::MetadataItem::simple("override")],
+                        vec![ast::MetaItem::simple("override")],
                         vec![],
                         Node::new(ast::Function {
                             name: ast::FnName::regular("createState"),
@@ -89,7 +89,7 @@ impl Lowerer {
                     )));
 
                     items.push(Node::new(ast::Item::Class {
-                        metadata: vec![],
+                        meta: vec![],
                         abstract_: false,
                         name,
                         generics: vec![],
@@ -107,7 +107,7 @@ impl Lowerer {
 
                 if let Some(ref body) = *body {
                     class_members.push(Node::new(ast::ClassMember::Method(
-                        vec![ast::MetadataItem::simple("override")],
+                        vec![ast::MetaItem::simple("override")],
                         vec![],
                         Node::new(ast::Function {
                             name: ast::FnName::regular("build"),
@@ -144,7 +144,7 @@ impl Lowerer {
                 };
 
                 items.push(Node::new(ast::Item::Class {
-                    metadata: vec![],
+                    meta: vec![],
                     abstract_: false,
                     name: match strategy {
                         Strategy::StatefulWidget => Symbol::intern(
@@ -185,7 +185,7 @@ impl Lowerer {
             }
             has_fields = true;
             args.push(ast::ArgDef {
-                metadata: vec![],
+                meta: vec![],
                 covariant: false,
                 ty: ast::VarType {
                     fcv: None,
@@ -216,7 +216,7 @@ impl Lowerer {
             generator: false,
         };
         Some(Node::new(ast::ClassMember::Constructor {
-            metadata: vec![],
+            meta: vec![],
             method_qualifiers: vec![ast::MethodQualifiers::Const],
             name: None,
             sig,
@@ -229,6 +229,7 @@ impl Lowerer {
                             unnamed: vec![],
                             named: vec![
                                 ast::NamedArg {
+                                    comments: vec![],
                                     name: Symbol::intern("key"),
                                     expr: Node::new(ast::Expr::Identifier(Symbol::intern("key"))),
                                 },
@@ -251,7 +252,7 @@ impl Lowerer {
             var_expr = Some(self.lower_expr(expr));
         }
         Node::new(ast::ClassMember::Fields {
-            metadata: vec![],
+            meta: vec![],
             static_: false,
             var_type: ast::VarType {
                 fcv: if field.mutable {
@@ -273,6 +274,7 @@ impl Lowerer {
     fn lower_config(&mut self, config: &Config) -> ast::NamedArg {
         match *config {
             Config::Field { name, ref value } => ast::NamedArg {
+                comments: vec![],
                 name,
                 expr: self.lower_expr(value),
             },
@@ -283,6 +285,7 @@ impl Lowerer {
                 field_name.extend(name.next().unwrap().to_uppercase());
                 field_name.extend(name);
                 ast::NamedArg {
+                    comments: vec![],
                     name: Symbol::intern(&field_name),
                     expr: Node::new(ast::Expr::Closure(
                         ast::FnSig::default(),

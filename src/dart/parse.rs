@@ -16,6 +16,7 @@ pub struct Parser<'a> {
     path: PathBuf,
     cur: Option<Token>,
     cur_span: Span,
+    pub cur_comments: Vec<Span>,
     skip_blocks: bool,
 }
 
@@ -71,6 +72,7 @@ impl<'a> Parser<'a> {
             tokens: tokens.iter().cloned(),
             cur: None,
             cur_span: Span::default(),
+            cur_comments: vec![],
             skip_blocks: false,
         };
         parser.bump();
@@ -112,10 +114,12 @@ impl<'a> Parser<'a> {
     }
 
     pub fn bump(&mut self) {
+        self.cur_comments.clear();
         loop {
             self.bump_raw();
             match self.cur {
                 Some(Token::WhiteSpace(_)) => {}
+                Some(Token::Comment(s)) => self.cur_comments.push(s),
                 _ => return,
             }
         }
@@ -171,8 +175,10 @@ impl<'a> Parser<'a> {
             }
             self.bump_raw();
         }
-        if let Some(Token::WhiteSpace(_)) = self.cur {
-            self.bump();
+        if let Some(token) = self.cur {
+            if token.is_whitespace() {
+                self.bump();
+            }
         }
         Ok(())
     }
@@ -326,10 +332,15 @@ impl<'a> Parser<'a> {
             if self.is_punctuation(')') {
                 break;
             }
+            let comments = self.cur_comments.drain(..).collect();
             let name = self.parse_ident()?;
             self.expect_punctuation(':')?;
             let expr = self.dart_expr()?;
-            named_arguments.push(NamedArg { name, expr });
+            named_arguments.push(NamedArg {
+                comments,
+                name,
+                expr,
+            });
             if !self.eat_punctuation(',') {
                 break;
             }
@@ -341,23 +352,33 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn dart_metadata(&mut self) -> ParseResult<Metadata> {
+    fn dart_meta(&mut self) -> ParseResult<Meta> {
         let mut meta = vec![];
-        while self.eat_punctuation('@') {
-            let mut meta_item = MetadataItem {
-                qualified: self.dart_qualified()?,
-                arguments: None,
-            };
-            if self.is_punctuation('(') {
-                meta_item.arguments = Some(self.dart_arguments()?);
+        loop {
+            if !self.cur_comments.is_empty() {
+                meta.push(MetaItem::Comments(self.cur_comments.drain(..).collect()));
             }
-
-            meta.push(meta_item);
+            if !self.eat_punctuation('@') {
+                break;
+            }
+            let qualified = self.dart_qualified()?;
+            let mut arguments = None;
+            if self.is_punctuation('(') {
+                arguments = Some(self.dart_arguments()?);
+            }
+            meta.push(MetaItem::Attribute {
+                qualified,
+                arguments,
+            });
         }
         Ok(meta)
     }
 
     pub fn dart_expr(&mut self) -> ParseResult<Node<Expr>> {
+        if !self.cur_comments.is_empty() {
+            let comments = self.cur_comments.drain(..).collect();
+            return Ok(Node::new(Expr::Comments(comments, self.dart_expr()?)));
+        }
         if self.eat_keyword("throw") {
             return Ok(Node::new(Expr::Throw(self.dart_expr()?)));
         }
@@ -804,8 +825,10 @@ impl<'a> Parser<'a> {
             expected!(self, NumberLiteral);
         }
 
-        if let Some(Token::WhiteSpace(_)) = self.cur {
-            self.bump();
+        if let Some(token) = self.cur {
+            if token.is_whitespace() {
+                self.bump();
+            }
         }
         Ok(Node::new(Expr::Number(Symbol::intern(&number))))
     }
@@ -868,7 +891,7 @@ impl<'a> Parser<'a> {
     }
 
     fn dart_arg_def(&mut self, default_separators: &[char]) -> ParseResult<ArgDef> {
-        let metadata = self.dart_metadata()?;
+        let meta = self.dart_meta()?;
         let covariant = self.eat_keyword("covariant");
         let mut ty = self.dart_var_type(false)?;
         let mut field = false;
@@ -892,7 +915,7 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(ArgDef {
-            metadata,
+            meta,
             covariant,
             ty,
             field,
@@ -954,7 +977,7 @@ impl<'a> Parser<'a> {
             }
         } else {
             loop {
-                if self.is_punctuation('}') {
+                if self.is_punctuation('}') && self.cur_comments.is_empty() {
                     break;
                 }
                 statements.push(self.dart_statement()?);
@@ -983,6 +1006,13 @@ impl<'a> Parser<'a> {
     }
 
     fn dart_statement(&mut self) -> ParseResult<Node<Statement>> {
+        if !self.cur_comments.is_empty() {
+            let comments = self.cur_comments.drain(..).collect();
+            return Ok(Node::new(Statement::Comments(
+                comments,
+                self.try(|p| p.dart_statement()),
+            )));
+        }
         if let Some((label, _)) = self.try(|p| Ok((p.parse_ident()?, p.expect_punctuation(':')?))) {
             return Ok(Node::new(
                 Statement::Labelled(label, self.dart_statement()?),
@@ -1229,7 +1259,7 @@ impl<'a> Parser<'a> {
     }
 
     fn dart_type_param_def(&mut self) -> ParseResult<Node<TypeParameter>> {
-        let metadata = self.dart_metadata()?;
+        let meta = self.dart_meta()?;
         let name = self.parse_ident()?;
         let extends = if self.eat_keyword("extends") {
             Some(self.dart_qualified()?)
@@ -1237,7 +1267,7 @@ impl<'a> Parser<'a> {
             None
         };
         Ok(Node::new(TypeParameter {
-            metadata,
+            meta,
             name,
             extends,
         }))
@@ -1403,7 +1433,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn dart_class_member(&mut self, class_name: Symbol) -> ParseResult<Node<ClassMember>> {
-        let metadata = self.dart_metadata()?;
+        let meta = self.dart_meta()?;
         let mut method_qualifiers = vec![];
         if self.eat_keyword("external") {
             method_qualifiers.push(MethodQualifiers::External);
@@ -1439,7 +1469,7 @@ impl<'a> Parser<'a> {
                 let path = self.dart_qualified()?;
                 self.expect_punctuation(';')?;
                 return Ok(Node::new(ClassMember::Redirect {
-                    metadata,
+                    meta,
                     method_qualifiers,
                     name,
                     sig,
@@ -1457,7 +1487,7 @@ impl<'a> Parser<'a> {
                 Some(self.dart_fn_body(true)?)
             };
             return Ok(Node::new(ClassMember::Constructor {
-                metadata,
+                meta,
                 method_qualifiers,
                 name,
                 sig,
@@ -1500,7 +1530,7 @@ impl<'a> Parser<'a> {
 
         if let Some((var_type, initializers)) = fields {
             return Ok(Node::new(ClassMember::Fields {
-                metadata,
+                meta,
                 static_,
                 var_type,
                 initializers,
@@ -1508,17 +1538,17 @@ impl<'a> Parser<'a> {
         }
         let function = self.dart_function(false)?;
         Ok(Node::new(
-            ClassMember::Method(metadata, method_qualifiers, function),
+            ClassMember::Method(meta, method_qualifiers, function),
         ))
     }
 
     pub fn dart_item(&mut self) -> ParseResult<Node<Item>> {
-        let metadata = self.dart_metadata()?;
+        let meta = self.dart_meta()?;
 
         if self.eat_keyword("library") {
             let path = self.parse_one_or_more('.', |p| p.parse_ident())?;
             self.expect_punctuation(';')?;
-            return Ok(Node::new(Item::LibraryName { metadata, path }));
+            return Ok(Node::new(Item::LibraryName { meta, path }));
         }
 
         if self.eat_keyword("import") {
@@ -1536,7 +1566,7 @@ impl<'a> Parser<'a> {
             let filters = self.dart_import_filters()?;
             self.expect_punctuation(';')?;
             return Ok(Node::new(Item::Import(
-                metadata,
+                meta,
                 Import {
                     uri,
                     deferred,
@@ -1554,21 +1584,21 @@ impl<'a> Parser<'a> {
             let uri = self.dart_string_literal()?;
             let import_filters = self.dart_import_filters()?;
             self.expect_punctuation(';')?;
-            return Ok(Node::new(Item::Export(metadata, uri, import_filters)));
+            return Ok(Node::new(Item::Export(meta, uri, import_filters)));
         }
 
         if self.eat_keyword("part") {
             if self.eat_keyword("of") {
                 let path = self.parse_one_or_more('.', |p| p.parse_ident())?;
                 self.expect_punctuation(';')?;
-                return Ok(Node::new(Item::PartOf { metadata, path }));
+                return Ok(Node::new(Item::PartOf { meta, path }));
             }
             let uri = self.dart_string_literal()?;
             self.expect_punctuation(';')?;
             let mut path = self.path.parent().unwrap().to_path_buf();
             path.extend(uri.get_simple_string().split('/'));
             return Ok(Node::new(Item::Part {
-                metadata,
+                meta,
                 uri,
                 module: Module::load(&path),
             }));
@@ -1607,7 +1637,7 @@ impl<'a> Parser<'a> {
                     members.push(self.dart_class_member(class_name)?);
                 }
                 return Ok(Node::new(Item::Class {
-                    metadata,
+                    meta,
                     abstract_,
                     name: class_name,
                     generics,
@@ -1628,7 +1658,7 @@ impl<'a> Parser<'a> {
                 };
                 self.expect_punctuation(';')?;
                 return Ok(Node::new(Item::MixinClass {
-                    metadata,
+                    meta,
                     abstract_,
                     name: class_name,
                     generics,
@@ -1643,7 +1673,7 @@ impl<'a> Parser<'a> {
             self.expect_punctuation('{')?;
             let mut values = vec![];
             loop {
-                values.push(self.parse_ident()?);
+                values.push((self.dart_meta()?, self.parse_ident()?));
                 if self.is_punctuation(',') {
                     self.expect_punctuation(',')?;
                 }
@@ -1652,7 +1682,7 @@ impl<'a> Parser<'a> {
                 }
             }
             return Ok(Node::new(Item::Enum {
-                metadata,
+                meta,
                 name: enum_name,
                 values,
             }));
@@ -1673,7 +1703,7 @@ impl<'a> Parser<'a> {
             let ty = Node::new(Type::FunctionOld(sig));
             self.expect_punctuation(';')?;
             return Ok(Node::new(Item::TypeAlias {
-                metadata,
+                meta,
                 name,
                 generics,
                 ty,
@@ -1686,12 +1716,12 @@ impl<'a> Parser<'a> {
             p.expect_punctuation(';')?;
             Ok((var_type, vars))
         }) {
-            return Ok(Node::new(Item::Vars(metadata, var_type, vars)));
+            return Ok(Node::new(Item::Vars(meta, var_type, vars)));
         }
 
         let external = self.eat_keyword("external");
         Ok(Node::new(Item::Function {
-            metadata,
+            meta,
             external,
             function: self.dart_function(false)?,
         }))

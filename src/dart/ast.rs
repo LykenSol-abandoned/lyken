@@ -94,23 +94,17 @@ impl Module {
 
 #[derive(Debug)]
 pub enum Item {
-    LibraryName {
-        metadata: Metadata,
-        path: Vec<Symbol>,
-    },
-    Import(Metadata, Import),
-    Export(Metadata, StringLiteral, Vec<ImportFilter>),
+    LibraryName { meta: Meta, path: Vec<Symbol> },
+    Import(Meta, Import),
+    Export(Meta, StringLiteral, Vec<ImportFilter>),
     Part {
-        metadata: Metadata,
+        meta: Meta,
         uri: StringLiteral,
         module: Node<Module>,
     },
-    PartOf {
-        metadata: Metadata,
-        path: Vec<Symbol>,
-    },
+    PartOf { meta: Meta, path: Vec<Symbol> },
     Class {
-        metadata: Metadata,
+        meta: Meta,
         abstract_: bool,
         name: Symbol,
         generics: Vec<Node<TypeParameter>>,
@@ -120,7 +114,7 @@ pub enum Item {
         members: Vec<Node<ClassMember>>,
     },
     MixinClass {
-        metadata: Metadata,
+        meta: Meta,
         abstract_: bool,
         name: Symbol,
         generics: Vec<Node<TypeParameter>>,
@@ -128,22 +122,22 @@ pub enum Item {
         interfaces: Vec<Node<Qualified>>,
     },
     Enum {
-        metadata: Metadata,
+        meta: Meta,
         name: Symbol,
-        values: Vec<Symbol>,
+        values: Vec<(Meta, Symbol)>,
     },
     TypeAlias {
-        metadata: Metadata,
+        meta: Meta,
         name: Symbol,
         generics: Vec<Node<TypeParameter>>,
         ty: Node<Type>,
     },
     Function {
-        metadata: Metadata,
+        meta: Meta,
         external: bool,
         function: Node<Function>,
     },
-    Vars(Metadata, VarType, Vec<Node<VarDef>>),
+    Vars(Meta, VarType, Vec<Node<VarDef>>),
 }
 
 #[derive(Debug)]
@@ -170,24 +164,25 @@ pub struct Function {
 
 #[derive(Debug)]
 pub enum ClassMember {
+    Comments(Vec<Span>),
     Redirect {
-        metadata: Metadata,
+        meta: Meta,
         method_qualifiers: Vec<MethodQualifiers>,
         name: Option<Symbol>,
         sig: FnSig,
         path: Node<Qualified>,
     },
     Constructor {
-        metadata: Metadata,
+        meta: Meta,
         method_qualifiers: Vec<MethodQualifiers>,
         name: Option<Symbol>,
         sig: FnSig,
         initializers: Vec<ConstructorInitializer>,
         function_body: Option<FnBody>,
     },
-    Method(Metadata, Vec<MethodQualifiers>, Node<Function>),
+    Method(Meta, Vec<MethodQualifiers>, Node<Function>),
     Fields {
-        metadata: Metadata,
+        meta: Meta,
         static_: bool,
         var_type: VarType,
         initializers: Vec<Node<VarDef>>,
@@ -236,7 +231,7 @@ pub enum ConstructorInitializer {
 
 #[derive(Debug)]
 pub struct TypeParameter {
-    pub metadata: Metadata,
+    pub meta: Meta,
     pub name: Symbol,
     pub extends: Option<Node<Qualified>>,
 }
@@ -392,6 +387,7 @@ impl Type {
 
 #[derive(Debug)]
 pub enum Expr {
+    Comments(Vec<Span>, Node<Expr>),
     Unary(UnOp, Node<Expr>),
     Binary(BinOp, Node<Expr>, Node<Expr>),
     Conditional(Node<Expr>, Node<Expr>, Node<Expr>),
@@ -462,6 +458,7 @@ pub struct Cascade {
 
 #[derive(Debug)]
 pub struct NamedArg {
+    pub comments: Vec<Span>,
     pub name: Symbol,
     pub expr: Node<Expr>,
 }
@@ -473,21 +470,24 @@ pub struct Args {
 }
 
 #[derive(Debug)]
-pub struct MetadataItem {
-    pub qualified: Node<Qualified>,
-    pub arguments: Option<Args>,
+pub enum MetaItem {
+    Comments(Vec<Span>),
+    Attribute {
+        qualified: Node<Qualified>,
+        arguments: Option<Args>,
+    },
 }
 
-impl MetadataItem {
-    pub fn simple<S: Into<Symbol>>(name: S) -> MetadataItem {
-        MetadataItem {
+impl MetaItem {
+    pub fn simple<S: Into<Symbol>>(name: S) -> MetaItem {
+        MetaItem::Attribute {
             qualified: Qualified::one(name, vec![]),
             arguments: None,
         }
     }
 }
 
-pub type Metadata = Vec<MetadataItem>;
+pub type Meta = Vec<MetaItem>;
 
 #[derive(Debug)]
 pub struct FnSig {
@@ -533,7 +533,7 @@ impl Default for OptionalArgKind {
 
 #[derive(Debug)]
 pub struct ArgDef {
-    pub metadata: Metadata,
+    pub meta: Meta,
     pub covariant: bool,
     pub ty: VarType,
     pub field: bool,
@@ -544,7 +544,7 @@ pub struct ArgDef {
 impl ArgDef {
     pub fn simple<S: Into<Symbol>>(ty: Node<Type>, name: S) -> ArgDef {
         ArgDef {
-            metadata: vec![],
+            meta: vec![],
             covariant: false,
             ty: VarType { fcv: None, ty },
             field: false,
@@ -605,6 +605,7 @@ pub struct TryPart {
 
 #[derive(Debug)]
 pub enum Statement {
+    Comments(Vec<Span>, Option<Node<Statement>>),
     Block(Vec<Node<Statement>>),
     Vars(VarType, Vec<Node<VarDef>>),
     Function(Node<Function>),
