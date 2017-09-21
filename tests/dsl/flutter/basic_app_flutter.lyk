@@ -5,9 +5,8 @@ def BasicAppBarSample {
   mut _selectedChoice: Choice = choices[0], // The app's "state".
 
   void _select(Choice choice) {
-    setState(() { // Causes the app to rebuild with the new _selectedChoice.
-      _selectedChoice = choice;
-    });
+    // Causes the app to rebuild with the new _selectedChoice.
+    _selectedChoice = choice;
   }
 
   ..MaterialApp {

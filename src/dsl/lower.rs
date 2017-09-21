@@ -1,9 +1,13 @@
 use dsl::ast::*;
-use dart::ast;
+use dsl::resolve::Res;
+use dart::{ast, resolve};
 use syntax::symbol::Symbol;
 use node::Node;
+use dart::fold::{Fold, Folder};
 
-pub struct Lowerer {}
+pub struct Lowerer {
+    pub needs_set_state: bool,
+}
 
 #[derive(Copy, Clone)]
 enum Strategy {
@@ -14,7 +18,9 @@ enum Strategy {
 
 impl Lowerer {
     pub fn new() -> Self {
-        Lowerer {}
+        Lowerer {
+            needs_set_state: false,
+        }
     }
 
     pub fn lower_items(&mut self, items: &[Node<Item>]) -> Vec<Node<ast::Item>> {
@@ -329,6 +335,59 @@ impl Lowerer {
     fn lower_type(&mut self, ty: &Type) -> Node<ast::Type> {
         match *ty {
             Type::Dart(ref dart) => dart.clone(),
+        }
+    }
+}
+
+impl Folder for Lowerer {
+    fn dart_expr(&mut self, expr: Node<ast::Expr>) -> Node<ast::Expr> {
+        let expr_folded = expr.super_fold(self);
+        match *expr {
+            ast::Expr::Binary(ast::BinOp::Assign(_), ref left, _) |
+            ast::Expr::Unary(ast::UnOp::PostDec, ref left) |
+            ast::Expr::Unary(ast::UnOp::PostInc, ref left) |
+            ast::Expr::Unary(ast::UnOp::PreDec, ref left) |
+            ast::Expr::Unary(ast::UnOp::PreInc, ref left) => {
+                if let ast::Expr::Identifier(_) = **left {
+                    if let Some(resolve::Res::Dsl(res)) = left.res().get() {
+                        if let Res::Field(ref field_def) = res {
+                            let FieldDef { mutable, .. } = **field_def;
+                            if mutable {
+                                self.needs_set_state = true;
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        expr_folded
+    }
+    fn dart_statement(&mut self, statement: Node<ast::Statement>) -> Node<ast::Statement> {
+        let statement = statement.super_fold(self);
+        if self.needs_set_state {
+            self.needs_set_state = false;
+            Node::new(ast::Statement::Expression(
+                Some(Node::new(ast::Expr::Suffix(
+                    Node::new(ast::Expr::Identifier(Symbol::intern("setState"))),
+                    ast::Suffix::Call(
+                        vec![],
+                        ast::Args {
+                            unnamed: vec![
+                                Node::new(ast::Expr::Closure(
+                                    ast::FnSig::default(),
+                                    ast::FnBody::Block(
+                                        Node::new(ast::Statement::Block(vec![statement])),
+                                    ),
+                                )),
+                            ],
+                            named: vec![],
+                        },
+                    ),
+                ))),
+            ))
+        } else {
+            statement
         }
     }
 }
