@@ -3,7 +3,7 @@ use std::env;
 use std::io::prelude::*;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command};
 use url::Url;
 
 pub const FLUTTER_PATH: &str = "flutter/";
@@ -41,6 +41,14 @@ pub struct Platform {
 impl Platform {
     fn load() -> Platform {
         let lib_path = Path::new(PATH).join("lib");
+        if !lib_path.exists() {
+            with_cmd(|cmd| {
+                let status = cmd.arg("flutter doctor").status().unwrap();
+                if !status.success() {
+                    process::exit(1);
+                }
+            });
+        }
         let mut f = File::open(lib_path.join("dart_server.platform")).unwrap();
         let mut text = String::new();
         f.read_to_string(&mut text).unwrap();
@@ -81,14 +89,11 @@ pub struct Packages {
 
 impl Packages {
     fn load(base_path: &Path) -> Packages {
+        PLATFORM.with(|_| {});
         let path = base_path.join(".packages");
         if !path.exists() {
             with_cmd(|cmd| {
-                let status = cmd.arg("pub get")
-                    .current_dir(base_path)
-                    .stdout(Stdio::null())
-                    .status()
-                    .unwrap();
+                let status = cmd.arg("pub get").current_dir(base_path).status().unwrap();
                 if !status.success() {
                     process::exit(1);
                 }

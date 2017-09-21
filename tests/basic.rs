@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn all_dsl() {
     Command::new("cargo")
-        .args(&["build", "--examples"])
+        .args(&["build", "--examples", "--release"])
         .stdout(Stdio::null())
         .status()
         .unwrap();
@@ -14,7 +14,7 @@ fn all_dsl() {
     for entry in WalkDir::new("tests") {
         let entry = entry.unwrap();
         if entry.path().extension().map_or(false, |x| x == "lyk") {
-            let status = Command::new("target/debug/examples/dsl-lower")
+            let status = Command::new("target/release/examples/dsl-lower")
                 .arg(entry.path())
                 .status()
                 .unwrap();
@@ -23,7 +23,7 @@ fn all_dsl() {
             }
         }
     }
-    let status = Command::new("target/debug/examples/dart-lex")
+    let status = Command::new("target/release/examples/dart-lex")
         .arg("tests")
         .status()
         .unwrap();

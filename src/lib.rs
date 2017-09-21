@@ -1,4 +1,4 @@
-#![feature(catch_expr, coerce_unsized, conservative_impl_trait, rustc_private, unsize)]
+#![feature(catch_expr, coerce_unsized, conservative_impl_trait, rustc_private, unsize, thread_local_state)]
 
 #[macro_use]
 extern crate enum_primitive;

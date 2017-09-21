@@ -1,5 +1,3 @@
-#![feature(rustc_private)]
-
 extern crate lyken;
 extern crate walkdir;
 
