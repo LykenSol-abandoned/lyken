@@ -13,12 +13,12 @@ fn main() {
     let path = PathBuf::from(env::args().nth(1).unwrap());
     let module = Module::load(&path);
     resolve::resolve(module.clone(), true);
-    let mut out = File::create(path.with_extension("lyk")).unwrap();
     let code = Lifter::new().lift_items(&module.items);
     let result = Printer::new().dsl_items(&code);
-    for token in result {
-        write!(out, "{}", token).unwrap();
-    }
+    File::create(path.with_extension("lyk"))
+        .unwrap()
+        .write_all(result.as_bytes())
+        .unwrap();
     if module.has_error {
         std::process::exit(1);
     }

@@ -13,13 +13,13 @@ fn main() {
     let path = PathBuf::from(env::args().nth(1).unwrap());
     match Parser::with_file(&path, |mut p| p.dsl_items()) {
         Ok(items) => {
-            let mut out = File::create(path.with_extension("dart")).unwrap();
             resolve::resolve(&items, true);
             let code = Lowerer::new().lower_items(&items);
             let result = Printer::new().dart_items(&code);
-            for token in result {
-                write!(out, "{}", token).unwrap();
-            }
+            File::create(path.with_extension("dart"))
+                .unwrap()
+                .write_all(result.as_bytes())
+                .unwrap();
         }
         Err(error) => {
             println!("{}", error);

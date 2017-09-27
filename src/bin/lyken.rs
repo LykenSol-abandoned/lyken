@@ -26,11 +26,11 @@ fn main() {
         let path = PathBuf::from(matches.value_of("FILE").unwrap());
         match Parser::with_file(&path, |mut p| p.dsl_items()) {
             Ok(items) => {
-                let mut out = File::create(path).unwrap();
                 let result = Printer::new().dsl_items(&items);
-                for token in result {
-                    write!(out, "{}", token).unwrap();
-                }
+                File::create(path)
+                    .unwrap()
+                    .write_all(result.as_bytes())
+                    .unwrap();
             }
             Err(error) => {
                 println!("{}", error);
@@ -54,12 +54,12 @@ fn main() {
         });
         match Parser::with_file(&path, |mut p| p.dsl_items()) {
             Ok(items) => {
-                let mut out = File::create(temp_dir.join("lib/main.dart")).unwrap();
                 let code = Lowerer::new().lower_items(&items);
                 let result = Printer::new().dart_items(&code);
-                for token in result {
-                    write!(out, "{}", token).unwrap();
-                }
+                File::create(temp_dir.join("lib/main.dart"))
+                    .unwrap()
+                    .write_all(result.as_bytes())
+                    .unwrap();
             }
             Err(error) => {
                 println!("{}", error);

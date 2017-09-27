@@ -15,6 +15,10 @@ fn main() {
             match Parser::new(entry.path(), &tokens).dart_module() {
                 Ok(module) => {
                     let result = Printer::new().dart_items(&module.items);
+                    let fm = lyken::codemap().new_filemap(String::new(), result);
+                    let result = Lexer::new(lyken::mk_sp(fm.start_pos, fm.end_pos))
+                        .tokenize()
+                        .unwrap();
 
                     fn whitespace_not_comment(token: &Token) -> bool {
                         match *token {
@@ -26,25 +30,27 @@ fn main() {
                     let mut old = tokens
                         .iter()
                         .filter(|&&(_, token)| !whitespace_not_comment(&token));
-                    let mut new = result.iter().filter(|token| !whitespace_not_comment(token));
+                    let mut new = result
+                        .iter()
+                        .filter(|&&(_, token)| !whitespace_not_comment(&token));
                     loop {
                         let (old, new) = match (old.next(), new.next()) {
                             (
                                 Some(&(_, Token::Punctuation(','))),
-                                new @ Some(&Token::Punctuation(')')),
+                                new @ Some(&(_, Token::Punctuation(')'))),
                             ) |
                             (
                                 Some(&(_, Token::Punctuation(','))),
-                                new @ Some(&Token::Punctuation(']')),
+                                new @ Some(&(_, Token::Punctuation(']'))),
                             ) |
                             (
                                 Some(&(_, Token::Punctuation(','))),
-                                new @ Some(&Token::Punctuation('}')),
+                                new @ Some(&(_, Token::Punctuation('}'))),
                             ) => (old.next(), new),
                             x => x,
                         };
                         match (old, new) {
-                            (Some(&(span, old)), Some(new)) => {
+                            (Some(&(span, old)), Some(&(_, new))) => {
                                 if old.to_string() != new.to_string() {
                                     println!("{:?}: `{}` != `{}`", span, old, new);
                                     break;
@@ -54,7 +60,7 @@ fn main() {
                                 println!("{:?}: `{}` missing", span, old);
                                 break;
                             }
-                            (None, Some(new)) => {
+                            (None, Some(&(_, new))) => {
                                 println!("{}: `{}` extraneous", entry.path().display(), new);
                                 break;
                             }

@@ -1,78 +1,97 @@
 use dart::ast::*;
-use dart::lex::{Lexer, Token};
+use dart::lex::Token;
 use syntax::symbol::Symbol;
+use std::fmt::{self, Write};
 use unicode_width::UnicodeWidthChar;
 use node::Node;
-use Span;
-
-fn str_to_span(string: &str) -> Span {
-    let fm = ::codemap().new_filemap(String::new(), string.to_string());
-    ::mk_sp(fm.start_pos, fm.end_pos)
-}
-
-fn span_to_str(span: Span) -> String {
-    ::codemap().span_to_snippet(span.to_span()).unwrap()
-}
 
 pub struct Printer {
-    tokens: Vec<Token>,
     open_boxes: Vec<LayoutBox>,
 }
 
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum BoxKind {
+    Block,
+    CommaDelim,
+    Inline,
+    Indent,
+    Text(String),
+}
+
 struct LayoutBox {
+    kind: BoxKind,
     children: Vec<LayoutBox>,
-    enter: usize,
-    exit: usize,
+    width: usize,
+    height: usize,
+    before: usize,
+    after: usize,
 }
 
 impl Printer {
     pub fn new() -> Self {
         Printer {
-            tokens: vec![],
             open_boxes: vec![
                 LayoutBox {
                     children: vec![],
-                    enter: 0,
-                    exit: 0,
+                    kind: BoxKind::Block,
+                    width: 0,
+                    height: 0,
+                    before: 0,
+                    after: 0,
                 },
             ],
         }
     }
 
-    pub fn enter(&mut self) {
+    pub fn pretty_print(&mut self) -> String {
+        self.open_boxes.pop().unwrap().pretty_print()
+    }
+
+    pub fn enter(&mut self, kind: BoxKind) {
         self.open_boxes.push(LayoutBox {
             children: vec![],
-            enter: self.tokens.len(),
-            exit: 0,
+            kind,
+            width: 0,
+            height: 0,
+            before: 0,
+            after: 0,
         });
     }
 
     pub fn exit(&mut self) {
-        let mut node = self.open_boxes.pop().unwrap();
-        node.exit = self.tokens.len();
+        let node = self.open_boxes.pop().unwrap();
         self.open_boxes.last_mut().unwrap().children.push(node);
     }
 
-    pub fn new_line(&mut self) {
-        self.print_str("\n");
+    pub fn print_str<T: ?Sized + fmt::Display>(&mut self, s: &T) {
+        let current = self.open_boxes.last_mut().unwrap();
+        if let Some(last) = current.children.last_mut() {
+            if let BoxKind::Text(ref mut text) = last.kind {
+                write!(text, "{}", s).unwrap();
+                return;
+            }
+        }
+        current.children.push(LayoutBox {
+            kind: BoxKind::Text(s.to_string()),
+            children: vec![],
+            width: 0,
+            height: 0,
+            before: 0,
+            after: 0,
+        });
     }
 
-    pub fn print_str(&mut self, string: &str) {
-        self.tokens.extend(
-            Lexer::new(str_to_span(string))
-                .tokenize()
-                .unwrap()
-                .into_iter()
-                .map(|(_, t)| t),
-        );
+    pub fn print_token(&mut self, token: Token) {
+        self.print_str(&token);
     }
 
     pub fn print_ident(&mut self, ident: Symbol) {
-        self.tokens.push(Token::Identifier(ident));
+        self.print_token(Token::Identifier(ident));
     }
 
     fn dart_string_lit(&mut self, literal: &StringLiteral) {
-        self.tokens.push(Token::StringLiteral {
+        self.print_token(Token::StringLiteral {
             contents: literal.prefix,
             raw: literal.raw,
             triple: literal.triple,
@@ -82,7 +101,7 @@ impl Printer {
         });
         for (i, &(ref expr, contents)) in literal.interpolated.iter().enumerate() {
             self.dart_expr(expr);
-            self.tokens.push(Token::StringLiteral {
+            self.print_token(Token::StringLiteral {
                 contents,
                 raw: literal.raw,
                 triple: literal.triple,
@@ -93,15 +112,15 @@ impl Printer {
         }
     }
 
-    pub fn dart_items(mut self, items: &[Node<Item>]) -> Vec<Token> {
+    pub fn dart_items(mut self, items: &[Node<Item>]) -> String {
         for item in items {
             self.dart_item(item);
-            self.new_line();
         }
         self.pretty_print()
     }
 
     pub fn dart_item(&mut self, item: &Item) {
+        self.enter(BoxKind::Block);
         match *item {
             Item::LibraryName { ref meta, ref path } => {
                 self.dart_meta(meta);
@@ -190,28 +209,29 @@ impl Printer {
                     self.print_str(" ");
                     if !mixins.is_empty() {
                         self.print_str("with ");
-                        for (i, mixin) in mixins.iter().enumerate() {
+                        self.enter(BoxKind::CommaDelim);
+                        for mixin in mixins {
+                            self.enter(BoxKind::Inline);
                             self.dart_qualified(mixin);
-                            if i < mixins.len() - 1 {
-                                self.print_str(", ");
-                            }
+                            self.exit();
                         }
+                        self.exit();
                     }
                 }
                 if !interfaces.is_empty() {
                     self.print_str("implements ");
-                    for (i, interface) in interfaces.iter().enumerate() {
+                    self.enter(BoxKind::CommaDelim);
+                    for interface in interfaces {
+                        self.enter(BoxKind::Inline);
                         self.dart_qualified(interface);
-                        if i < interfaces.len() - 1 {
-                            self.print_str(", ");
-                        }
+                        self.exit();
                     }
+                    self.exit();
                 }
                 self.print_str("{");
-                self.enter();
+                self.enter(BoxKind::Indent);
                 for member in members {
                     self.dart_class_member(member, name);
-                    self.new_line();
                 }
                 self.exit();
                 self.print_str("}");
@@ -234,20 +254,22 @@ impl Printer {
                 self.print_str(" = ");
                 self.dart_qualified(&mixins[0]);
                 self.print_str(" with ");
-                for (i, mixin) in mixins.iter().enumerate().skip(1) {
+                self.enter(BoxKind::CommaDelim);
+                for mixin in &mixins[1..] {
+                    self.enter(BoxKind::Inline);
                     self.dart_qualified(mixin);
-                    if i < mixins.len() - 1 {
-                        self.print_str(", ");
-                    }
+                    self.exit();
                 }
+                self.exit();
                 if !interfaces.is_empty() {
                     self.print_str("implements ");
-                    for (i, interface) in interfaces.iter().enumerate() {
+                    self.enter(BoxKind::CommaDelim);
+                    for interface in interfaces {
+                        self.enter(BoxKind::Inline);
                         self.dart_qualified(interface);
-                        if i < interfaces.len() - 1 {
-                            self.print_str(", ");
-                        }
+                        self.exit();
                     }
+                    self.exit();
                 }
                 self.print_str(";");
             }
@@ -260,13 +282,12 @@ impl Printer {
                 self.print_str("enum ");
                 self.print_ident(name);
                 self.print_str(" {");
-                self.enter();
-                for (i, &(ref meta, value)) in values.iter().enumerate() {
+                self.enter(BoxKind::CommaDelim);
+                for &(ref meta, value) in values {
+                    self.enter(BoxKind::Indent);
                     self.dart_meta(meta);
                     self.print_ident(value);
-                    if i < values.len() - 1 {
-                        self.print_str(",");
-                    }
+                    self.exit();
                 }
                 self.exit();
                 self.print_str("}");
@@ -299,14 +320,16 @@ impl Printer {
                 self.print_str(";");
             }
         }
+        self.exit();
     }
 
     pub fn dart_statement(&mut self, statement: &Statement) {
         match *statement {
             Statement::Comments(ref comments, ref statement) => {
                 for &comment in comments {
-                    self.tokens.push(Token::Comment(comment));
-                    self.new_line();
+                    self.enter(BoxKind::Block);
+                    self.print_token(Token::Comment(comment));
+                    self.exit();
                 }
                 if let Some(ref statement) = *statement {
                     self.dart_statement(statement);
@@ -314,10 +337,11 @@ impl Printer {
             }
             Statement::Block(ref statements) => {
                 self.print_str("{");
-                self.enter();
+                self.enter(BoxKind::Indent);
                 for stm in statements {
+                    self.enter(BoxKind::Block);
                     self.dart_statement(stm);
-                    self.new_line();
+                    self.exit();
                 }
                 self.exit();
                 self.print_str("}");
@@ -342,12 +366,13 @@ impl Printer {
                             self.dart_expr(expr);
                         }
                         self.print_str("; ");
-                        for (i, expr) in body.iter().enumerate() {
+                        self.enter(BoxKind::CommaDelim);
+                        for expr in body {
+                            self.enter(BoxKind::Inline);
                             self.dart_expr(expr);
-                            if i < body.len() - 1 {
-                                self.print_str(", ");
-                            }
+                            self.exit();
                         }
+                        self.exit();
                     }
                     ForLoop::In(name, ref expr) => {
                         self.print_ident(name);
@@ -380,8 +405,9 @@ impl Printer {
                 self.print_str("switch(");
                 self.dart_expr(expr);
                 self.print_str(") {");
-                self.enter();
+                self.enter(BoxKind::Indent);
                 for case in cases {
+                    self.enter(BoxKind::Block);
                     for &label in &case.labels {
                         self.print_ident(label);
                         self.print_str(": ");
@@ -394,10 +420,11 @@ impl Printer {
                     }
                     self.print_str(": ");
                     for stm in &case.statements {
-                        self.enter();
+                        self.enter(BoxKind::Inline);
                         self.dart_statement(stm);
                         self.exit();
                     }
+                    self.exit();
                 }
                 self.exit();
                 self.print_str("}");
@@ -496,8 +523,9 @@ impl Printer {
         match *expr {
             Expr::Comments(ref comments, ref expr) => {
                 for &comment in comments {
-                    self.tokens.push(Token::Comment(comment));
-                    self.new_line();
+                    self.enter(BoxKind::Block);
+                    self.print_token(Token::Comment(comment));
+                    self.exit();
                 }
                 self.dart_expr(expr);
             }
@@ -579,18 +607,17 @@ impl Printer {
                 }
                 self.print_str("[");
                 if !elements.is_empty() {
-                    self.enter();
                     if elements.len() > 1 {
-                        for (i, elem) in elements.iter().enumerate() {
+                        self.enter(BoxKind::CommaDelim);
+                        for elem in elements {
+                            self.enter(BoxKind::Inline);
                             self.dart_expr(elem);
-                            if i < elements.len() - 1 {
-                                self.print_str(",");
-                            }
+                            self.exit();
                         }
+                        self.exit();
                     } else {
                         self.dart_expr(&elements[0]);
                     }
-                    self.exit();
                 }
                 self.print_str("]");
             }
@@ -610,14 +637,13 @@ impl Printer {
                     self.print_str(">");
                 }
                 self.print_str("{");
-                self.enter();
-                for (i, &(ref k, ref v)) in kv.iter().enumerate() {
+                self.enter(BoxKind::CommaDelim);
+                for &(ref k, ref v) in kv {
+                    self.enter(BoxKind::Inline);
                     self.dart_expr(k);
                     self.print_str(" : ");
                     self.dart_expr(v);
-                    if i < kv.len() - 1 {
-                        self.print_str(", ");
-                    }
+                    self.exit();
                 }
                 self.exit();
                 self.print_str("}");
@@ -725,12 +751,13 @@ impl Printer {
             Suffix::Call(ref types, ref args) => {
                 if !types.is_empty() {
                     self.print_str("<");
-                    for (i, ty) in types.iter().enumerate() {
+                    self.enter(BoxKind::CommaDelim);
+                    for ty in types {
+                        self.enter(BoxKind::Inline);
                         self.dart_type(ty);
-                        if i < types.len() - 1 {
-                            self.print_str(", ");
-                        }
+                        self.exit();
                     }
+                    self.exit();
                     self.print_str(">");
                 }
                 self.dart_arguments(args);
@@ -740,21 +767,16 @@ impl Printer {
 
     fn dart_arguments(&mut self, args: &Args) {
         self.print_str("(");
-        self.enter();
-        for (i, arg) in args.unnamed.iter().enumerate() {
+        self.enter(BoxKind::CommaDelim);
+        for arg in &args.unnamed {
+            self.enter(BoxKind::Inline);
             self.dart_expr(arg);
-            if i < args.unnamed.len() - 1 {
-                self.print_str(", ");
-            }
+            self.exit();
         }
-        if args.unnamed.len() != 0 && args.named.len() != 0 {
-            self.print_str(", ");
-        }
-        for (i, arg) in args.named.iter().enumerate() {
+        for arg in &args.named {
+            self.enter(BoxKind::Inline);
             self.dart_named_argurment(arg);
-            if i < args.named.len() - 1 {
-                self.print_str(", ");
-            }
+            self.exit();
         }
         self.exit();
         self.print_str(")");
@@ -807,12 +829,13 @@ impl Printer {
                 self.print_ident(name);
                 if !params.is_empty() {
                     self.print_str("<");
-                    for (i, param) in params.iter().enumerate() {
+                    self.enter(BoxKind::CommaDelim);
+                    for param in params {
+                        self.enter(BoxKind::Inline);
                         self.dart_type_parameter(param);
-                        if i < params.len() - 1 {
-                            self.print_str(", ");
-                        }
+                        self.exit();
                     }
+                    self.exit();
                     self.print_str(">");
                 }
             }
@@ -832,20 +855,22 @@ impl Printer {
 
         if !qualified.params.is_empty() {
             self.print_str("<");
-            for (i, ty) in qualified.params.iter().enumerate() {
+            self.enter(BoxKind::CommaDelim);
+            for ty in &qualified.params {
+                self.enter(BoxKind::Inline);
                 self.dart_type(ty);
-                if i < qualified.params.len() - 1 {
-                    self.print_str(", ");
-                }
+                self.exit();
             }
+            self.exit();
             self.print_str(">");
         }
     }
 
     fn dart_named_argurment(&mut self, arg: &NamedArg) {
         for &comment in &arg.comments {
-            self.tokens.push(Token::Comment(comment));
-            self.new_line();
+            self.enter(BoxKind::Block);
+            self.print_token(Token::Comment(comment));
+            self.exit();
         }
         self.print_ident(arg.name);
         self.print_str(": ");
@@ -879,31 +904,35 @@ impl Printer {
 
     fn dart_fn_args(&mut self, args: &FnSig) {
         self.print_str("(");
-        for (i, it) in args.required.iter().enumerate() {
+        self.enter(BoxKind::CommaDelim);
+        for it in &args.required {
+            self.enter(BoxKind::Inline);
             self.dart_arg_def(it);
-            if i < args.required.len() - 1 || !args.optional.is_empty() {
-                self.print_str(", ");
-            }
+            self.exit();
         }
         if !args.optional.is_empty() {
+            self.enter(BoxKind::Inline);
             match args.optional_kind {
                 OptionalArgKind::Positional => {
                     self.print_str("[");
-                    for (i, arg) in args.optional.iter().enumerate() {
+                    self.enter(BoxKind::CommaDelim);
+                    for arg in &args.optional {
+                        self.enter(BoxKind::Inline);
                         self.dart_arg_def(arg);
                         if let Some(ref expr) = arg.var.init {
                             self.print_str(" = ");
                             self.dart_expr(expr);
                         }
-                        if i < args.optional.len() - 1 {
-                            self.print_str(", ");
-                        }
+                        self.exit();
                     }
+                    self.exit();
                     self.print_str("]");
                 }
                 OptionalArgKind::Named => {
                     self.print_str("{");
-                    for (i, arg) in args.optional.iter().enumerate() {
+                    self.enter(BoxKind::CommaDelim);
+                    for arg in &args.optional {
+                        self.enter(BoxKind::Inline);
                         self.dart_arg_def(arg);
                         if let Some(ref expr) = arg.var.init {
                             if arg.default_uses_eq {
@@ -913,14 +942,15 @@ impl Printer {
                             }
                             self.dart_expr(expr);
                         }
-                        if i < args.optional.len() - 1 {
-                            self.print_str(", ");
-                        }
+                        self.exit();
                     }
+                    self.exit();
                     self.print_str("}");
                 }
             }
+            self.exit();
         }
+        self.exit();
         self.print_str(")");
 
         if args.async {
@@ -964,12 +994,13 @@ impl Printer {
             }
         }
         self.dart_type_spaced(&var_ty.ty);
-        for (i, var) in vars.iter().enumerate() {
+        self.enter(BoxKind::CommaDelim);
+        for var in vars {
+            self.enter(BoxKind::Inline);
             self.dart_name_and_initializer(var);
-            if i < vars.len() - 1 {
-                self.print_str(", ");
-            }
+            self.exit();
         }
+        self.exit();
     }
 
     fn dart_name_and_initializer(&mut self, ident: &VarDef) {
@@ -983,7 +1014,6 @@ impl Printer {
     fn dart_meta(&mut self, meta: &Meta) {
         for meta in meta {
             self.dart_meta_item(meta);
-            self.new_line();
         }
     }
 
@@ -993,15 +1023,18 @@ impl Printer {
                 ref qualified,
                 ref arguments,
             } => {
+                self.enter(BoxKind::Block);
                 self.print_str("@");
                 self.dart_qualified(qualified);
                 if let Some(ref args) = *arguments {
                     self.dart_arguments(args);
                 }
+                self.exit();
             }
             MetaItem::Comments(ref comments) => for &comment in comments {
-                self.tokens.push(Token::Comment(comment));
-                self.new_line();
+                self.enter(BoxKind::Block);
+                self.print_token(Token::Comment(comment));
+                self.exit();
             },
         }
     }
@@ -1012,12 +1045,13 @@ impl Printer {
         } else {
             self.print_str("show ");
         }
-        for (i, ident) in comb.names.iter().enumerate() {
+        self.enter(BoxKind::CommaDelim);
+        for ident in &comb.names {
+            self.enter(BoxKind::Inline);
             self.print_ident(*ident);
-            if i < comb.names.len() - 1 {
-                self.print_str(", ");
-            }
+            self.exit();
         }
+        self.exit();
     }
 
     fn dart_type_parameter(&mut self, param: &Node<TypeParameter>) {
@@ -1030,10 +1064,10 @@ impl Printer {
     }
 
     pub fn dart_class_member(&mut self, member: &ClassMember, class_name: Symbol) {
+        self.enter(BoxKind::Block);
         match *member {
             ClassMember::Comments(ref comments) => for &comment in comments {
-                self.tokens.push(Token::Comment(comment));
-                self.new_line();
+                self.print_token(Token::Comment(comment));
             },
             ClassMember::Redirect {
                 ref meta,
@@ -1076,20 +1110,19 @@ impl Printer {
                     self.print_str(".");
                     self.print_ident(name);
                 }
-                self.print_str(" ");
                 self.dart_fn_args(sig);
-                self.print_str(" ");
                 if initializers.len() > 0 {
-                    self.print_str(": ");
-                    for (i, init) in initializers.iter().enumerate() {
+                    self.print_str(" : ");
+                    self.enter(BoxKind::CommaDelim);
+                    for init in initializers {
+                        self.enter(BoxKind::Inline);
                         self.dart_initializer(init);
-                        if i < initializers.len() - 1 {
-                            self.print_str(", ");
-                        }
+                        self.exit();
                     }
+                    self.exit();
                 }
-                self.print_str(" ");
                 if let Some(ref body) = *function_body {
+                    self.print_str(" ");
                     self.dart_function_body(body, true);
                 } else {
                     self.print_str(";");
@@ -1117,6 +1150,7 @@ impl Printer {
                 self.print_str(";");
             }
         }
+        self.exit();
     }
 
     fn dart_function_name(&mut self, func: FnName) {
@@ -1223,234 +1257,133 @@ impl Printer {
             }
         }
     }
+
+    fn dart_generics(&mut self, generics: &[Node<TypeParameter>]) {
+        if !generics.is_empty() {
+            self.print_str("<");
+            self.enter(BoxKind::CommaDelim);
+            for param in generics {
+                self.enter(BoxKind::Inline);
+                self.dart_type_parameter(param);
+                self.exit();
+            }
+            self.exit();
+            self.print_str(">");
+        }
+    }
 }
 
 const LINE_WIDTH: usize = 80;
 const INDENT: &str = "  ";
 
-impl Printer {
-    fn token_size(&self, token: Token) -> usize {
-        let mut size: usize = 0;
-        match token {
-            Token::WhiteSpace(s) | Token::Comment(s) => for c in span_to_str(s).chars() {
-                size += UnicodeWidthChar::width(c).unwrap_or(1);
-            },
-            Token::IntegerLiteral(s) | Token::Identifier(s) => for c in s.as_str().chars() {
-                size += UnicodeWidthChar::width(c).unwrap_or(1);
-            },
-            Token::Punctuation(c) => size += UnicodeWidthChar::width(c).unwrap_or(1),
-            Token::StringLiteral {
-                contents,
-                raw,
-                triple,
-                quote: _,
-                interpolation_before,
-                interpolation_after,
-            } => {
-                if raw {
-                    size += 1;
+impl LayoutBox {
+    fn compute_sizes(&mut self) {
+        if let BoxKind::Text(ref text) = self.kind {
+            self.before = text.len();
+            return;
+        }
+        for child in &mut self.children {
+            child.compute_sizes();
+        }
+        // TODO handle CommaDelim
+        for child in &self.children {
+            if self.height == 0 {
+                self.before += child.before;
+            } else {
+                self.after += child.before;
+            }
+            if child.height != 0 {
+                if self.after != 0 {
+                    self.height = 1;
+                    if self.width < self.after {
+                        self.width = self.after;
+                    }
+                    self.after = 0;
                 }
-                if interpolation_before {
-                    size += 1;
-                } else {
-                    size += 1 + 2 * triple as usize;
+                self.height += child.height;
+                if self.width < child.width {
+                    self.width = child.width;
                 }
-                for c in span_to_str(contents).chars() {
-                    size += UnicodeWidthChar::width(c).unwrap_or(1);
-                }
-                if interpolation_after {
-                    size += 2;
-                } else {
-                    size += 1 + 2 * triple as usize;
+            }
+            self.after = child.after;
+        }
+        if self.kind == BoxKind::Block {
+            for line in &mut [&mut self.before, &mut self.after] {
+                if **line != 0 {
+                    self.height += 1;
+                    if self.width < **line {
+                        self.width = **line;
+                    }
+                    **line = 0;
                 }
             }
         }
-        size
-    }
-
-    fn line_size(&self, tokens: &[Token], line_size: &mut usize) -> Option<usize> {
-        for (i, it) in tokens.iter().enumerate() {
-            match *it {
-                Token::WhiteSpace(s) | Token::Comment(s) => {
-                    let s = span_to_str(s);
-                    if s == "\n" {
-                        return Some(i);
-                    }
-                    for c in s.chars() {
-                        *line_size += UnicodeWidthChar::width(c).unwrap_or(1);
-                    }
-                }
-                Token::IntegerLiteral(s) | Token::Identifier(s) => for c in s.as_str().chars() {
-                    *line_size += UnicodeWidthChar::width(c).unwrap_or(1);
-                },
-                Token::Punctuation(c) => *line_size += UnicodeWidthChar::width(c).unwrap_or(1),
-                Token::StringLiteral {
-                    contents,
-                    raw,
-                    triple,
-                    quote: _,
-                    interpolation_before,
-                    interpolation_after,
-                } => {
-                    if raw {
-                        *line_size += 1;
-                    }
-                    if interpolation_before {
-                        *line_size += 1;
-                    } else {
-                        *line_size += 1 + 2 * triple as usize;
-                    }
-                    for c in span_to_str(contents).chars() {
-                        *line_size += UnicodeWidthChar::width(c).unwrap_or(1);
-                    }
-                    if interpolation_after {
-                        *line_size += 2;
-                    } else {
-                        *line_size += 1 + 2 * triple as usize;
-                    }
-                }
+        if self.kind == BoxKind::Indent {
+            self.width += INDENT.len();
+            if self.after != 0 {
+                self.after += INDENT.len();
             }
         }
-        None
     }
-
-    fn search_breaker(&self, line: &[Token], size: usize, pos: &mut usize) -> Option<char> {
-        let mut i = line.len() - 1;
-        *pos = line.len() - 1;
-        let mut new_size = size;
-        while i > 0 && new_size > LINE_WIDTH {
-            new_size -= self.token_size(line[i]);
-            *pos -= 1;
-            i -= 1;
-        }
-        while i > 0 && new_size > 0 {
-            match line[i] {
-                Token::Punctuation(c) => match c {
-                    '(' | '[' | '{' | ',' | '+' | '-' | ')' | ']' | '}' | '.' => return Some(c),
-                    _ => {}
-                },
-                _ => {}
+    fn print_into_lines(&self, mut depth: usize, lines: &mut Vec<String>) {
+        fn indent(string: &mut String, depth: usize) {
+            if !string.is_empty() {
+                return;
             }
-            i -= 1;
-            *pos -= 1;
-            new_size -= self.token_size(line[i]);
-        }
-        None
-    }
-
-    fn break_line(&self, line: &[Token], depth: usize) -> Vec<Vec<Token>> {
-        fn put_spaces(depth: usize) -> Token {
-            let mut string = String::new();
             for _ in 0..depth {
                 string.push_str(INDENT);
             }
-            Token::WhiteSpace(str_to_span(&string))
         }
-
-        let mut lines = vec![];
-        if line.is_empty() {
-            return lines;
-        }
-        let mut size = 0;
-        if let Some(pos) = self.line_size(line, &mut size) {
-            if size + depth * INDENT.len() < LINE_WIDTH {
-                let mut vec = vec![];
-                vec.push(put_spaces(depth));
-                vec.extend(&line[0..pos]);
-                lines.push(vec);
-                lines.extend(self.break_line(&line[pos + 1..], depth));
-            } else {
-                let mut breaker_pos = 0;
-                if let Some(c) = self.search_breaker(
-                    &line[0..pos],
-                    size + depth * INDENT.len(),
-                    &mut breaker_pos,
-                ) {
-                    let mut vec = vec![];
-                    if c == ',' {
-                        vec.push(put_spaces(depth));
-                    } else {
-                        vec.push(put_spaces(depth + 1));
-                    }
-                    vec.extend(&line[0..breaker_pos + 1]);
-                    lines.push(vec);
-                    lines.extend(self.break_line(&line[breaker_pos + 1..], depth + 1));
-                } else {
-                    if line.len() > 0 {
-                        let mut vec = vec![];
-                        vec.push(put_spaces(depth));
-                        vec.extend(line.to_vec());
-                        lines.push(vec);
-                    }
-                }
+        if let BoxKind::Text(ref s) = self.kind {
+            if !s.is_empty() {
+                indent(lines.last_mut().unwrap(), depth);
             }
-        } else {
-            if size + depth * INDENT.len() < LINE_WIDTH {
-                if line.len() > 0 {
-                    let mut vec = vec![put_spaces(depth)];
-                    vec.extend(line);
-                    lines.push(vec);
-                }
-            } else {
-                let mut breaker_pos = 0;
-                if let Some(c) =
-                    self.search_breaker(&line, size + depth * INDENT.len(), &mut breaker_pos)
-                {
-                    if breaker_pos < line.len() {
-                        let mut vec = vec![];
-                        if c == ',' {
-                            vec.push(put_spaces(depth));
-                        } else {
-                            vec.push(put_spaces(depth + 1));
-                        }
-                        vec.extend(&line[0..breaker_pos + 1]);
-                        lines.push(vec);
-                        lines.extend(self.break_line(&line[breaker_pos + 1..], depth + 1));
-                    }
-                } else {
-                    let mut vec = vec![];
-                    vec.push(put_spaces(depth));
-                    vec.extend(line.to_vec());
-                    lines.push(vec);
+            lines.last_mut().unwrap().push_str(s);
+            return;
+        }
+        if self.kind == BoxKind::Indent {
+            depth += 1;
+        }
+        if self.kind == BoxKind::Block && !lines.last().unwrap().is_empty() {
+            lines.push(String::new());
+        }
+        let mut comma_delim_block = false;
+        if self.kind == BoxKind::CommaDelim {
+            for child in &self.children {
+                if child.height != 0 {
+                    comma_delim_block = true;
+                    break;
                 }
             }
         }
-        lines
-    }
-
-    fn dart_layout_box(&self, node: &LayoutBox, depth: usize) -> Vec<Vec<Token>> {
-        let mut lines = vec![];
-        let mut cur = node.enter;
-        for child in &node.children {
-            lines.extend(self.break_line(&self.tokens[cur..child.enter], depth));
-            cur = child.exit;
-            lines.extend(self.dart_layout_box(child, depth + 1));
+        if comma_delim_block {
+            depth += 1;
         }
-        lines.extend(self.break_line(&self.tokens[cur..node.exit], depth));
-        lines
-    }
-
-    pub fn pretty_print(&mut self) -> Vec<Token> {
-        let mut tokens = vec![];
-        let mut root = self.open_boxes.pop().unwrap();
-        root.exit = self.tokens.len();
-        for it in self.dart_layout_box(&root, 0) {
-            tokens.extend(it);
-            tokens.push(Token::WhiteSpace(str_to_span("\n")));
-        }
-        tokens
-    }
-
-    fn dart_generics(&mut self, generics: &[Node<TypeParameter>]) {
-        if !generics.is_empty() {
-            self.print_str("<");
-            for (i, param) in generics.iter().enumerate() {
-                self.dart_type_parameter(param);
-                if i < generics.len() - 1 {
-                    self.print_str(", ");
-                }
+        for (i, child) in self.children.iter().enumerate() {
+            if comma_delim_block {
+                lines.push(String::new());
             }
-            self.print_str(">");
+            child.print_into_lines(depth, lines);
+            if self.kind == BoxKind::CommaDelim && i < self.children.len() - 1 {
+                lines.last_mut().unwrap().push_str(", ");
+            }
         }
+        if self.kind == BoxKind::Block || comma_delim_block {
+            lines.push(String::new());
+        }
+    }
+
+    pub fn pretty_print(&mut self) -> String {
+        self.compute_sizes();
+
+        let mut lines = vec![String::new()];
+        self.print_into_lines(0, &mut lines);
+
+        let mut result = String::new();
+        for line in lines {
+            result.push_str(&line);
+            result.push('\n');
+        }
+        result
     }
 }
