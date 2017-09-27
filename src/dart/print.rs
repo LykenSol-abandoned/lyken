@@ -1,9 +1,9 @@
 use dart::ast::*;
 use dart::lex::{Lexer, Token};
 use syntax::symbol::Symbol;
-use syntax::codemap::Span;
 use unicode_width::UnicodeWidthChar;
 use node::Node;
+use Span;
 
 fn str_to_span(string: &str) -> Span {
     let fm = ::codemap().new_filemap(String::new(), string.to_string());
@@ -11,7 +11,7 @@ fn str_to_span(string: &str) -> Span {
 }
 
 fn span_to_str(span: Span) -> String {
-    ::codemap().span_to_snippet(span).unwrap()
+    ::codemap().span_to_snippet(span.to_span()).unwrap()
 }
 
 pub struct Printer {

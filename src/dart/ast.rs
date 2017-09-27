@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::iter;
 use std::path::{Path, PathBuf};
 use syntax::symbol::Symbol;
-use syntax::codemap::Span;
+use Span;
 
 node_field!(parent_any: Node<Any>);
 
@@ -438,7 +438,7 @@ pub struct StringLiteral {
 impl StringLiteral {
     pub fn get_simple_string(&self) -> String {
         assert!(self.interpolated.is_empty());
-        ::codemap().span_to_snippet(self.prefix).unwrap()
+        ::codemap().span_to_snippet(self.prefix.to_span()).unwrap()
     }
 }
 

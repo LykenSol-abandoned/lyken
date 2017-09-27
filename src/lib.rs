@@ -1,4 +1,5 @@
-#![feature(catch_expr, coerce_unsized, conservative_impl_trait, rustc_private, unsize, thread_local_state)]
+#![feature(catch_expr, coerce_unsized, conservative_impl_trait, rustc_private, unsize,
+          thread_local_state)]
 
 #[macro_use]
 extern crate enum_primitive;
@@ -9,8 +10,9 @@ extern crate unicode_width;
 extern crate unicode_xid;
 extern crate url;
 
-use syntax::codemap::{BytePos, CodeMap, FilePathMapping, Span, NO_EXPANSION, SPAN_DEBUG};
+use syntax::codemap::{self, BytePos, CodeMap, FilePathMapping, NO_EXPANSION, SPAN_DEBUG};
 use std::rc::Rc;
+use std::fmt;
 
 #[macro_use]
 pub mod node;
@@ -48,12 +50,23 @@ pub fn codemap() -> Rc<CodeMap> {
     CODEMAP.with(|c| c.clone())
 }
 
-// FIXME replace Span fields with methods.
-#[allow(deprecated)]
-pub fn mk_sp(lo: BytePos, hi: BytePos) -> Span {
-    Span {
-        lo,
-        hi,
-        ctxt: NO_EXPANSION,
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct Span {
+    pub lo: BytePos,
+    pub hi: BytePos,
+}
+
+impl fmt::Debug for Span {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.to_span())
     }
+}
+impl Span {
+    pub fn to_span(&self) -> codemap::Span {
+        codemap::Span::new(self.lo, self.hi, NO_EXPANSION)
+    }
+}
+
+pub fn mk_sp(lo: BytePos, hi: BytePos) -> Span {
+    Span { lo, hi }
 }

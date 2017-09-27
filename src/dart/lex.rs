@@ -1,12 +1,13 @@
 #![allow(unused_doc_comment)]
 
 use unicode_xid::UnicodeXID;
-use std::str;
-use syntax::symbol::Symbol;
 use std::fmt;
 use std::path::Path;
 use std::rc::Rc;
-use syntax::codemap::{BytePos, FileMap, Pos, Span};
+use std::str;
+use syntax::codemap::{BytePos, FileMap, Pos};
+use syntax::symbol::Symbol;
+use Span;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Token {
@@ -29,7 +30,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Token::WhiteSpace(s) | Token::Comment(s) => {
-                write!(f, "{}", ::codemap().span_to_snippet(s).unwrap())
+                write!(f, "{}", ::codemap().span_to_snippet(s.to_span()).unwrap())
             }
             Token::IntegerLiteral(s) | Token::Identifier(s) => write!(f, "{}", s),
             Token::Punctuation(c) => write!(f, "{}", c),
@@ -52,7 +53,11 @@ impl fmt::Display for Token {
                     }
                     write!(f, "{}", quote)?;
                 }
-                write!(f, "{}", ::codemap().span_to_snippet(contents).unwrap())?;
+                write!(
+                    f,
+                    "{}",
+                    ::codemap().span_to_snippet(contents.to_span()).unwrap()
+                )?;
                 if interpolation_after {
                     write!(f, "${{")?;
                 } else {
@@ -116,8 +121,6 @@ pub struct Lexer {
     tokens: Vec<(Span, Token)>,
 }
 
-// FIXME replace Span fields with methods.
-#[allow(deprecated)]
 impl Lexer {
     pub fn new(span: Span) -> Self {
         assert!(span.lo <= span.hi);
@@ -310,8 +313,10 @@ impl Lexer {
                             interpolation_after: false,
                             interpolation_before: false,
                         },
-                    )) => if ::codemap().span_to_snippet(contents).unwrap().is_empty() &&
-                        prev_quote == quote
+                    )) => if ::codemap()
+                        .span_to_snippet(contents.to_span())
+                        .unwrap()
+                        .is_empty() && prev_quote == quote
                     {
                         triple = true;
                         raw = prev_raw;
