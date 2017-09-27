@@ -1,14 +1,15 @@
 #![allow(unused_doc_comment)]
 
+use syntax::codemap::BytePos;
+use syntax::symbol::Symbol;
 use dart::ast::*;
 use dart::lex::{self, Lexer, Token};
-use syntax::symbol::Symbol;
-use syntax::codemap::Span;
 use node::Node;
 use std::{iter, slice};
+use Span;
+use std::path::{Path, PathBuf};
 
 type Tokens<'a> = iter::Cloned<slice::Iter<'a, (Span, Token)>>;
-use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
 pub struct Parser<'a> {
@@ -71,7 +72,7 @@ impl<'a> Parser<'a> {
             path: path.to_path_buf(),
             tokens: tokens.iter().cloned(),
             cur: None,
-            cur_span: Span::default(),
+            cur_span: ::mk_sp(BytePos(0), BytePos(0)),
             cur_comments: vec![],
             skip_blocks: false,
         };
