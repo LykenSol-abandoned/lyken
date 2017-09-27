@@ -1,18 +1,17 @@
 use dsl::ast::*;
-use dart::print::Printer;
-use dart::lex::Token;
+use dart::print::{BoxKind, Printer};
 use node::Node;
 
 impl Printer {
-    pub fn dsl_items(mut self, items: &[Node<Item>]) -> Vec<Token> {
+    pub fn dsl_items(mut self, items: &[Node<Item>]) -> String {
         for item in items {
             self.dsl_item(item);
-            self.new_line();
         }
         self.pretty_print()
     }
 
     fn dsl_item(&mut self, item: &Item) {
+        self.enter(BoxKind::Block);
         match *item {
             Item::ComponentDef {
                 name,
@@ -23,15 +22,16 @@ impl Printer {
                 self.print_str("def ");
                 self.print_ident(name);
                 self.print_str(" {");
-                self.enter();
+                self.enter(BoxKind::Block);
                 for field in fields {
+                    self.enter(BoxKind::Block);
                     self.dsl_field_def(field);
-                    self.print_str(",");
-                    self.new_line();
+                    self.enter(BoxKind::CommaDelim);
+                    self.exit();
+                    self.exit();
                 }
                 for dart_member in dart_members {
                     self.dart_class_member(dart_member, name);
-                    self.new_line();
                 }
                 if let Some(ref body) = *body {
                     self.print_str("..");
@@ -42,6 +42,7 @@ impl Printer {
             }
             Item::Dart(ref item) => self.dart_item(item),
         }
+        self.exit();
     }
 
     fn dsl_field_def(&mut self, field: &FieldDef) {
@@ -91,11 +92,12 @@ impl Printer {
                 self.dart_qualified(path);
                 if !unnamed.is_empty() {
                     self.print_str("(");
-                    self.enter();
+                    self.enter(BoxKind::Inline);
                     for (i, unnamed_item) in unnamed.iter().enumerate() {
                         self.dsl_expr(unnamed_item);
                         if i < unnamed.len() - 1 {
-                            self.print_str(", ");
+                            self.enter(BoxKind::CommaDelim);
+                            self.exit();
                         }
                     }
                     self.exit();
@@ -103,11 +105,12 @@ impl Printer {
                 }
                 if !config.is_empty() {
                     self.print_str(" {");
-                    self.enter();
+                    self.enter(BoxKind::Block);
                     for (i, c) in config.iter().enumerate() {
                         self.dsl_config(c);
                         if i < config.len() - 1 {
-                            self.print_str(", ");
+                            self.enter(BoxKind::CommaDelim);
+                            self.exit();
                         }
                     }
                     self.exit();
@@ -116,11 +119,12 @@ impl Printer {
             }
             Expr::Array(ref args) => {
                 self.print_str("[");
-                self.enter();
+                self.enter(BoxKind::Inline);
                 for (i, arg) in args.iter().enumerate() {
                     self.dsl_expr(arg);
                     if i < args.len() - 1 {
-                        self.print_str(", ");
+                        self.enter(BoxKind::CommaDelim);
+                        self.exit();
                     }
                 }
                 self.exit();
