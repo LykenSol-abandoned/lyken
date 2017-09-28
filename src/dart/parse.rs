@@ -9,14 +9,20 @@ use std::{iter, slice};
 use Span;
 use std::path::{Path, PathBuf};
 
+/// An iterator producing tokens and their corresponding spans.
 type Tokens<'a> = iter::Cloned<slice::Iter<'a, (Span, Token)>>;
 
 #[derive(Clone)]
 pub struct Parser<'a> {
+    /// The tokens that the parser works on.
     tokens: Tokens<'a>,
+    /// File path of the module being parsed.
     path: PathBuf,
+    /// The current token.
     cur: Option<Token>,
+    /// The current token's span.
     cur_span: Span,
+    /// Comments between the current and the previous non-whitespace token.
     pub cur_comments: Vec<Span>,
     skip_blocks: bool,
 }
@@ -45,6 +51,7 @@ error_chain! {
 }
 
 #[derive(Debug)]
+/// Possible unmet expectations during parsing.
 pub enum Expected {
     Punctuation(char),
     Punctuation2(char, char),
@@ -57,6 +64,7 @@ pub enum Expected {
     StringLiteral,
 }
 
+/// Signal an `ExpectedAt` error.
 macro_rules! expected {
     ($p:expr, $kind:ident $($rest:tt)*) => {
         bail!(ErrorKind::ExpectedAt {
@@ -90,18 +98,12 @@ impl<'a> Parser<'a> {
         self
     }
 
+    /// Returns true if there are no tokens left.
     pub fn out_of_tokens(&self) -> bool {
         self.cur.is_none()
     }
 
-    pub fn is_keyword(&self, s: &str) -> bool {
-        if let Some(token) = self.cur {
-            token.as_ident().map_or(false, |x| x == s)
-        } else {
-            false
-        }
-    }
-
+    /// Advances the current token.
     fn bump_raw(&mut self) {
         match self.tokens.next() {
             Some((span, token)) => {
@@ -114,6 +116,8 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Advances the current token, skipping past any number of
+    /// whitespace tokens.
     pub fn bump(&mut self) {
         self.cur_comments.clear();
         loop {
@@ -126,6 +130,8 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Consumes the current token if it matches the
+    /// given punctuation, otherwise returns an error.
     pub fn expect_punctuation(&mut self, c: char) -> ParseResult<()> {
         if self.cur != Some(Token::Punctuation(c)) {
             expected!(self, Punctuation(c));
@@ -134,14 +140,19 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Returns true and consumes the current token
+    /// if it matches the given punctuation.
     pub fn eat_punctuation(&mut self, c: char) -> bool {
         self.try(|p| p.expect_punctuation(c)).is_some()
     }
 
+    /// Returns true if the current token matches the given punctuation.
     pub fn is_punctuation(&self, c: char) -> bool {
         self.probe(|p| p.eat_punctuation(c))
     }
 
+    /// Consumes a number of tokens if they match the
+    /// given punctuation pair, otherwise it returns an error.
     fn expect_punctuation2(&mut self, c1: char, c2: char) -> ParseResult<()> {
         if !self.is_punctuation(c1) {
             expected!(self, Punctuation2(c1, c2));
@@ -154,14 +165,19 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Returns true and consumes a number of tokens
+    /// if they match the given punctuation pair.
     pub fn eat_punctuation2(&mut self, c1: char, c2: char) -> bool {
         self.try(|p| p.expect_punctuation2(c1, c2)).is_some()
     }
 
+    /// Returns true if a number of tokens match the given punctuation pair.
     fn is_punctuation2(&self, c1: char, c2: char) -> bool {
         self.probe(|p| p.eat_punctuation2(c1, c2))
     }
 
+    /// Consumes a number of tokens if they match the
+    /// given binary operator, otherwise it returns an error.
     fn expect_bin_op(&mut self, op: BinOp) -> ParseResult<()> {
         for op2 in BinOp::values() {
             if op2 != op && op2.as_str().starts_with(op.as_str()) {
@@ -184,14 +200,19 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Returns true and consumes a number of tokens
+    /// if they match the given binary operator.
     fn eat_bin_op(&mut self, op: BinOp) -> bool {
         self.try(|p| p.expect_bin_op(op)).is_some()
     }
 
+    /// Returns true if a number of tokens match the given binary operator.
     fn is_bin_op(&self, op: BinOp) -> bool {
         self.probe(|p| p.eat_bin_op(op))
     }
 
+    /// Consumes the current token if it matches the
+    /// given keyword, otherwise it returns an error.
     pub fn expect_keyword(&mut self, s: &'static str) -> ParseResult<()> {
         if !self.is_keyword(s) {
             expected!(self, Keyword(s));
@@ -200,14 +221,28 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Returns true and consumes the current token
+    /// if it matches the given keyword.
     pub fn eat_keyword(&mut self, s: &'static str) -> bool {
         self.expect_keyword(s).is_ok()
     }
 
+    /// Returns true if the current token matches the given keyword.
+    pub fn is_keyword(&self, s: &str) -> bool {
+        if let Some(token) = self.cur {
+            token.as_ident().map_or(false, |x| x == s)
+        } else {
+            false
+        }
+    }
+
+    /// Applies `f` on the parser, always rolling back the state.
     pub fn probe<F: FnOnce(&mut Self) -> R, R>(&self, f: F) -> R {
         f(&mut self.clone())
     }
 
+    /// Applies `f` on the parser, committing the modified state on success,
+    /// and rolling back on error.
     pub fn try<F: FnOnce(&mut Self) -> ParseResult<T>, T>(&mut self, f: F) -> Option<T> {
         let mut parser = self.clone();
         let result = f(&mut parser);
@@ -217,6 +252,7 @@ impl<'a> Parser<'a> {
         result.ok()
     }
 
+    /// Parses a non-keyword identifier, otherwise returns an error.
     pub fn parse_ident(&mut self) -> ParseResult<Symbol> {
         let ident = if let Some(Token::Identifier(ident)) = self.cur {
             ident
@@ -259,6 +295,7 @@ impl<'a> Parser<'a> {
         Ok(ident)
     }
 
+    /// Parses a list that is delimited by the specified `delim` character.
     pub fn parse_one_or_more<F: FnMut(&mut Self) -> ParseResult<T>, T>(
         &mut self,
         delim: char,
