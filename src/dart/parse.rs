@@ -24,7 +24,6 @@ pub struct Parser<'a> {
     cur_span: Span,
     /// Comments between the current and the previous non-whitespace token.
     pub cur_comments: Vec<Span>,
-    skip_blocks: bool,
 }
 
 error_chain! {
@@ -82,7 +81,6 @@ impl<'a> Parser<'a> {
             cur: None,
             cur_span: ::mk_sp(BytePos(0), BytePos(0)),
             cur_comments: vec![],
-            skip_blocks: false,
         };
         parser.bump();
         parser
@@ -91,11 +89,6 @@ impl<'a> Parser<'a> {
     pub fn with_file<F: FnOnce(Parser) -> ParseResult<R>, R>(path: &Path, f: F) -> ParseResult<R> {
         let tokens = Lexer::from_file(path)?.tokenize()?;
         f(Parser::new(path, &tokens))
-    }
-
-    pub fn skip_blocks(mut self) -> Self {
-        self.skip_blocks = true;
-        self
     }
 
     /// Returns true if there are no tokens left.
@@ -999,27 +992,11 @@ impl<'a> Parser<'a> {
     pub fn dart_block(&mut self) -> ParseResult<Node<Statement>> {
         self.expect_punctuation('{')?;
         let mut statements = vec![];
-        if self.skip_blocks {
-            let mut depth = 0;
-            while !self.out_of_tokens() {
-                if self.is_punctuation('{') {
-                    depth += 1;
-                }
-                if self.is_punctuation('}') {
-                    if depth == 0 {
-                        break;
-                    }
-                    depth -= 1;
-                }
-                self.bump();
+        loop {
+            if self.is_punctuation('}') && self.cur_comments.is_empty() {
+                break;
             }
-        } else {
-            loop {
-                if self.is_punctuation('}') && self.cur_comments.is_empty() {
-                    break;
-                }
-                statements.push(self.dart_statement()?);
-            }
+            statements.push(self.dart_statement()?);
         }
         self.expect_punctuation('}')?;
         Ok(Node::new(Statement::Block(statements)))
