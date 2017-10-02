@@ -12,16 +12,21 @@ pub struct Printer {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum BoxKind {
-    Block,
     CommaDelim,
-    Inline,
-    Indent,
+    Group,
     Text(String),
 }
 
 struct LayoutBox {
     kind: BoxKind,
+    indent: bool,
+    block: bool,
     children: Vec<LayoutBox>,
+    sizing: BoxSizing,
+}
+
+#[derive(Default)]
+struct BoxSizing {
     width: usize,
     height: usize,
     before: usize,
@@ -34,11 +39,10 @@ impl Printer {
             open_boxes: vec![
                 LayoutBox {
                     children: vec![],
-                    kind: BoxKind::Block,
-                    width: 0,
-                    height: 0,
-                    before: 0,
-                    after: 0,
+                    indent: false,
+                    block: true,
+                    kind: BoxKind::Group,
+                    sizing: BoxSizing::default(),
                 },
             ],
         }
@@ -51,12 +55,20 @@ impl Printer {
     pub fn enter(&mut self, kind: BoxKind) {
         self.open_boxes.push(LayoutBox {
             children: vec![],
+            indent: false,
+            block: false,
             kind,
-            width: 0,
-            height: 0,
-            before: 0,
-            after: 0,
+            sizing: BoxSizing::default(),
         });
+    }
+    pub fn enter_indent(&mut self) {
+        self.enter(BoxKind::Group);
+        self.open_boxes.last_mut().unwrap().indent = true;
+    }
+
+    pub fn enter_block(&mut self) {
+        self.enter(BoxKind::Group);
+        self.open_boxes.last_mut().unwrap().block = true;
     }
 
     pub fn exit(&mut self) {
@@ -74,11 +86,15 @@ impl Printer {
         }
         current.children.push(LayoutBox {
             kind: BoxKind::Text(s.to_string()),
+            indent: false,
+            block: false,
             children: vec![],
-            width: 0,
-            height: 0,
-            before: 0,
-            after: 0,
+            sizing: BoxSizing {
+                width: 0,
+                height: 0,
+                before: 0,
+                after: 0,
+            },
         });
     }
 
@@ -120,7 +136,7 @@ impl Printer {
     }
 
     pub fn dart_item(&mut self, item: &Item) {
-        self.enter(BoxKind::Block);
+        self.enter_block();
         match *item {
             Item::LibraryName { ref meta, ref path } => {
                 self.dart_meta(meta);
@@ -211,7 +227,7 @@ impl Printer {
                         self.print_str("with ");
                         self.enter(BoxKind::CommaDelim);
                         for mixin in mixins {
-                            self.enter(BoxKind::Inline);
+                            self.enter(BoxKind::Group);
                             self.dart_qualified(mixin);
                             self.exit();
                         }
@@ -222,14 +238,14 @@ impl Printer {
                     self.print_str("implements ");
                     self.enter(BoxKind::CommaDelim);
                     for interface in interfaces {
-                        self.enter(BoxKind::Inline);
+                        self.enter(BoxKind::Group);
                         self.dart_qualified(interface);
                         self.exit();
                     }
                     self.exit();
                 }
                 self.print_str("{");
-                self.enter(BoxKind::Indent);
+                self.enter_indent();
                 for member in members {
                     self.dart_class_member(member, name);
                 }
@@ -256,7 +272,7 @@ impl Printer {
                 self.print_str(" with ");
                 self.enter(BoxKind::CommaDelim);
                 for mixin in &mixins[1..] {
-                    self.enter(BoxKind::Inline);
+                    self.enter(BoxKind::Group);
                     self.dart_qualified(mixin);
                     self.exit();
                 }
@@ -265,7 +281,7 @@ impl Printer {
                     self.print_str("implements ");
                     self.enter(BoxKind::CommaDelim);
                     for interface in interfaces {
-                        self.enter(BoxKind::Inline);
+                        self.enter(BoxKind::Group);
                         self.dart_qualified(interface);
                         self.exit();
                     }
@@ -284,7 +300,7 @@ impl Printer {
                 self.print_str(" {");
                 self.enter(BoxKind::CommaDelim);
                 for &(ref meta, value) in values {
-                    self.enter(BoxKind::Indent);
+                    self.enter_indent();
                     self.dart_meta(meta);
                     self.print_ident(value);
                     self.exit();
@@ -327,7 +343,7 @@ impl Printer {
         match *statement {
             Statement::Comments(ref comments, ref statement) => {
                 for &comment in comments {
-                    self.enter(BoxKind::Block);
+                    self.enter_block();
                     self.print_token(Token::Comment(comment));
                     self.exit();
                 }
@@ -337,9 +353,9 @@ impl Printer {
             }
             Statement::Block(ref statements) => {
                 self.print_str("{");
-                self.enter(BoxKind::Indent);
+                self.enter_indent();
                 for stm in statements {
-                    self.enter(BoxKind::Block);
+                    self.enter_block();
                     self.dart_statement(stm);
                     self.exit();
                 }
@@ -368,7 +384,7 @@ impl Printer {
                         self.print_str("; ");
                         self.enter(BoxKind::CommaDelim);
                         for expr in body {
-                            self.enter(BoxKind::Inline);
+                            self.enter(BoxKind::Group);
                             self.dart_expr(expr);
                             self.exit();
                         }
@@ -405,9 +421,9 @@ impl Printer {
                 self.print_str("switch(");
                 self.dart_expr(expr);
                 self.print_str(") {");
-                self.enter(BoxKind::Indent);
+                self.enter_indent();
                 for case in cases {
-                    self.enter(BoxKind::Block);
+                    self.enter_block();
                     for &label in &case.labels {
                         self.print_ident(label);
                         self.print_str(": ");
@@ -420,7 +436,7 @@ impl Printer {
                     }
                     self.print_str(": ");
                     for stm in &case.statements {
-                        self.enter(BoxKind::Inline);
+                        self.enter(BoxKind::Group);
                         self.dart_statement(stm);
                         self.exit();
                     }
@@ -523,7 +539,7 @@ impl Printer {
         match *expr {
             Expr::Comments(ref comments, ref expr) => {
                 for &comment in comments {
-                    self.enter(BoxKind::Block);
+                    self.enter_block();
                     self.print_token(Token::Comment(comment));
                     self.exit();
                 }
@@ -610,7 +626,7 @@ impl Printer {
                     if elements.len() > 1 {
                         self.enter(BoxKind::CommaDelim);
                         for elem in elements {
-                            self.enter(BoxKind::Inline);
+                            self.enter(BoxKind::Group);
                             self.dart_expr(elem);
                             self.exit();
                         }
@@ -639,7 +655,7 @@ impl Printer {
                 self.print_str("{");
                 self.enter(BoxKind::CommaDelim);
                 for &(ref k, ref v) in kv {
-                    self.enter(BoxKind::Inline);
+                    self.enter(BoxKind::Group);
                     self.dart_expr(k);
                     self.print_str(" : ");
                     self.dart_expr(v);
@@ -753,7 +769,7 @@ impl Printer {
                     self.print_str("<");
                     self.enter(BoxKind::CommaDelim);
                     for ty in types {
-                        self.enter(BoxKind::Inline);
+                        self.enter(BoxKind::Group);
                         self.dart_type(ty);
                         self.exit();
                     }
@@ -769,12 +785,12 @@ impl Printer {
         self.print_str("(");
         self.enter(BoxKind::CommaDelim);
         for arg in &args.unnamed {
-            self.enter(BoxKind::Inline);
+            self.enter(BoxKind::Group);
             self.dart_expr(arg);
             self.exit();
         }
         for arg in &args.named {
-            self.enter(BoxKind::Inline);
+            self.enter(BoxKind::Group);
             self.dart_named_argurment(arg);
             self.exit();
         }
@@ -831,7 +847,7 @@ impl Printer {
                     self.print_str("<");
                     self.enter(BoxKind::CommaDelim);
                     for param in params {
-                        self.enter(BoxKind::Inline);
+                        self.enter(BoxKind::Group);
                         self.dart_type_parameter(param);
                         self.exit();
                     }
@@ -857,7 +873,7 @@ impl Printer {
             self.print_str("<");
             self.enter(BoxKind::CommaDelim);
             for ty in &qualified.params {
-                self.enter(BoxKind::Inline);
+                self.enter(BoxKind::Group);
                 self.dart_type(ty);
                 self.exit();
             }
@@ -868,7 +884,7 @@ impl Printer {
 
     fn dart_named_argurment(&mut self, arg: &NamedArg) {
         for &comment in &arg.comments {
-            self.enter(BoxKind::Block);
+            self.enter_block();
             self.print_token(Token::Comment(comment));
             self.exit();
         }
@@ -906,18 +922,18 @@ impl Printer {
         self.print_str("(");
         self.enter(BoxKind::CommaDelim);
         for it in &args.required {
-            self.enter(BoxKind::Inline);
+            self.enter(BoxKind::Group);
             self.dart_arg_def(it);
             self.exit();
         }
         if !args.optional.is_empty() {
-            self.enter(BoxKind::Inline);
+            self.enter(BoxKind::Group);
             match args.optional_kind {
                 OptionalArgKind::Positional => {
                     self.print_str("[");
                     self.enter(BoxKind::CommaDelim);
                     for arg in &args.optional {
-                        self.enter(BoxKind::Inline);
+                        self.enter(BoxKind::Group);
                         self.dart_arg_def(arg);
                         if let Some(ref expr) = arg.var.init {
                             self.print_str(" = ");
@@ -932,7 +948,7 @@ impl Printer {
                     self.print_str("{");
                     self.enter(BoxKind::CommaDelim);
                     for arg in &args.optional {
-                        self.enter(BoxKind::Inline);
+                        self.enter(BoxKind::Group);
                         self.dart_arg_def(arg);
                         if let Some(ref expr) = arg.var.init {
                             if arg.default_uses_eq {
@@ -996,7 +1012,7 @@ impl Printer {
         self.dart_type_spaced(&var_ty.ty);
         self.enter(BoxKind::CommaDelim);
         for var in vars {
-            self.enter(BoxKind::Inline);
+            self.enter(BoxKind::Group);
             self.dart_name_and_initializer(var);
             self.exit();
         }
@@ -1023,7 +1039,7 @@ impl Printer {
                 ref qualified,
                 ref arguments,
             } => {
-                self.enter(BoxKind::Block);
+                self.enter_block();
                 self.print_str("@");
                 self.dart_qualified(qualified);
                 if let Some(ref args) = *arguments {
@@ -1032,7 +1048,7 @@ impl Printer {
                 self.exit();
             }
             MetaItem::Comments(ref comments) => for &comment in comments {
-                self.enter(BoxKind::Block);
+                self.enter_block();
                 self.print_token(Token::Comment(comment));
                 self.exit();
             },
@@ -1047,7 +1063,7 @@ impl Printer {
         }
         self.enter(BoxKind::CommaDelim);
         for ident in &comb.names {
-            self.enter(BoxKind::Inline);
+            self.enter(BoxKind::Group);
             self.print_ident(*ident);
             self.exit();
         }
@@ -1064,11 +1080,8 @@ impl Printer {
     }
 
     pub fn dart_class_member(&mut self, member: &ClassMember, class_name: Symbol) {
-        self.enter(BoxKind::Block);
+        self.enter_block();
         match *member {
-            ClassMember::Comments(ref comments) => for &comment in comments {
-                self.print_token(Token::Comment(comment));
-            },
             ClassMember::Redirect {
                 ref meta,
                 ref method_qualifiers,
@@ -1115,7 +1128,7 @@ impl Printer {
                     self.print_str(" : ");
                     self.enter(BoxKind::CommaDelim);
                     for init in initializers {
-                        self.enter(BoxKind::Inline);
+                        self.enter(BoxKind::Group);
                         self.dart_initializer(init);
                         self.exit();
                     }
@@ -1263,7 +1276,7 @@ impl Printer {
             self.print_str("<");
             self.enter(BoxKind::CommaDelim);
             for param in generics {
-                self.enter(BoxKind::Inline);
+                self.enter(BoxKind::Group);
                 self.dart_type_parameter(param);
                 self.exit();
             }
@@ -1276,52 +1289,105 @@ impl Printer {
 const LINE_WIDTH: usize = 80;
 const INDENT: &str = "  ";
 
+impl BoxSizing {
+    fn line_break(&mut self) {
+        let line = if self.height == 0 {
+            &mut self.before
+        } else {
+            &mut self.after
+        };
+        if *line != 0 {
+            self.height += 1;
+            if self.width < *line {
+                self.width = *line;
+            }
+            *line = 0;
+        }
+    }
+    fn extend_inline(&mut self, width: usize) {
+        if self.height == 0 {
+            self.before += width;
+        } else {
+            self.after += width;
+        }
+    }
+    fn extend_block(&mut self, width: usize, height: usize) {
+        if height != 0 {
+            self.line_break();
+            self.height += height;
+            if self.width < width {
+                self.width = width;
+            }
+        }
+    }
+}
+
 impl LayoutBox {
-    fn compute_sizes(&mut self) {
-        if let BoxKind::Text(ref text) = self.kind {
-            self.before = text.len();
-            return;
-        }
-        for child in &mut self.children {
-            child.compute_sizes();
-        }
-        // TODO handle CommaDelim
-        for child in &self.children {
-            if self.height == 0 {
-                self.before += child.before;
-            } else {
-                self.after += child.before;
+    fn combine_children_sizes(&mut self) {
+        self.sizing = BoxSizing::default();
+        for (i, child) in self.children.iter().enumerate() {
+            if self.kind == BoxKind::CommaDelim && self.block {
+                self.sizing.line_break();
             }
-            if child.height != 0 {
-                if self.after != 0 {
-                    self.height = 1;
-                    if self.width < self.after {
-                        self.width = self.after;
-                    }
-                    self.after = 0;
-                }
-                self.height += child.height;
-                if self.width < child.width {
-                    self.width = child.width;
+            self.sizing.extend_inline(child.sizing.before);
+            self.sizing
+                .extend_block(child.sizing.width, child.sizing.height);
+            self.sizing.extend_inline(child.sizing.after);
+            if self.kind == BoxKind::CommaDelim {
+                if self.block {
+                    self.sizing.extend_inline(",".len());
+                } else if i < self.children.len() - 1 {
+                    self.sizing.extend_inline(", ".len());
                 }
             }
-            self.after = child.after;
         }
-        if self.kind == BoxKind::Block {
-            for line in &mut [&mut self.before, &mut self.after] {
+        if self.block {
+            for line in &mut [&mut self.sizing.before, &mut self.sizing.after] {
                 if **line != 0 {
-                    self.height += 1;
-                    if self.width < **line {
-                        self.width = **line;
+                    self.sizing.height += 1;
+                    if self.sizing.width < **line {
+                        self.sizing.width = **line;
                     }
                     **line = 0;
                 }
             }
         }
-        if self.kind == BoxKind::Indent {
-            self.width += INDENT.len();
-            if self.after != 0 {
-                self.after += INDENT.len();
+        if self.indent {
+            self.sizing.width += INDENT.len();
+            if self.sizing.after != 0 {
+                self.sizing.after += INDENT.len();
+            }
+        }
+    }
+    fn compute_sizes(&mut self) {
+        if let BoxKind::Text(ref text) = self.kind {
+            self.sizing.extend_inline(text.len());
+            return;
+        }
+        for child in &mut self.children {
+            child.compute_sizes();
+        }
+        let mut comma_delim_block = false;
+        if self.kind == BoxKind::CommaDelim {
+            for child in &self.children {
+                if child.sizing.height != 0 {
+                    comma_delim_block = true;
+                    break;
+                }
+            }
+        }
+        if comma_delim_block && self.children.len() > 1 {
+            self.indent = true;
+            self.block = true;
+        }
+
+        self.combine_children_sizes();
+
+        if self.kind == BoxKind::CommaDelim && !self.block && self.sizing.height == 0 {
+            if self.sizing.before >= LINE_WIDTH {
+                self.indent = true;
+                self.block = true;
+                self.combine_children_sizes();
             }
         }
     }
@@ -1341,34 +1407,26 @@ impl LayoutBox {
             lines.last_mut().unwrap().push_str(s);
             return;
         }
-        if self.kind == BoxKind::Indent {
-            depth += 1;
-        }
-        if self.kind == BoxKind::Block && !lines.last().unwrap().is_empty() {
+        if self.block && !lines.last().unwrap().is_empty() {
             lines.push(String::new());
         }
-        let mut comma_delim_block = false;
-        if self.kind == BoxKind::CommaDelim {
-            for child in &self.children {
-                if child.height != 0 {
-                    comma_delim_block = true;
-                    break;
-                }
-            }
-        }
-        if comma_delim_block {
+        if self.indent {
             depth += 1;
         }
         for (i, child) in self.children.iter().enumerate() {
-            if comma_delim_block {
+            if self.kind == BoxKind::CommaDelim && self.block && !lines.last().unwrap().is_empty() {
                 lines.push(String::new());
             }
             child.print_into_lines(depth, lines);
-            if self.kind == BoxKind::CommaDelim && i < self.children.len() - 1 {
-                lines.last_mut().unwrap().push_str(", ");
+            if self.kind == BoxKind::CommaDelim {
+                if self.block {
+                    lines.last_mut().unwrap().push_str(",");
+                } else if i < self.children.len() - 1 {
+                    lines.last_mut().unwrap().push_str(", ");
+                }
             }
         }
-        if self.kind == BoxKind::Block || comma_delim_block {
+        if self.block {
             lines.push(String::new());
         }
     }

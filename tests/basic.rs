@@ -5,11 +5,14 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn all_dsl() {
-    Command::new("cargo")
+    let status = Command::new("cargo")
         .args(&["build", "--examples", "--release"])
         .stdout(Stdio::null())
         .status()
         .unwrap();
+    if !status.success() {
+        std::process::exit(1);
+    }
 
     for entry in WalkDir::new("tests") {
         let entry = entry.unwrap();
