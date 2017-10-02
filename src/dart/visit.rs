@@ -208,7 +208,6 @@ impl VisitNode for ClassMember {
     }
     fn super_visit<V: Visitor>(class_member: Node<Self>, visitor: &mut V) {
         match *class_member {
-            ClassMember::Comments(_) => {}
             ClassMember::Redirect {
                 ref meta,
                 ref sig,

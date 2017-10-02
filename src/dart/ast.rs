@@ -164,7 +164,6 @@ pub struct Function {
 
 #[derive(Debug)]
 pub enum ClassMember {
-    Comments(Vec<Span>),
     Redirect {
         meta: Meta,
         method_qualifiers: Vec<MethodQualifiers>,

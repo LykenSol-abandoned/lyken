@@ -154,26 +154,24 @@ impl Fold for Node<Item> {
                 ref mixins,
                 ref interfaces,
                 ref members,
-            } => {
-                Node::new(Item::Class {
-                    meta: meta.fold(folder),
-                    abstract_,
-                    name,
-                    generics: generics
-                        .iter()
-                        .map(|generic| generic.fold(folder))
-                        .collect(),
-                    superclass: superclass
-                        .as_ref()
-                        .map(|superclass| superclass.fold(folder)),
-                    mixins: mixins.iter().map(|mixin| mixin.fold(folder)).collect(),
-                    interfaces: interfaces
-                        .iter()
-                        .map(|interface| interface.fold(folder))
-                        .collect(),
-                    members: members.iter().map(|member| member.fold(folder)).collect(),
-                })
-            }
+            } => Node::new(Item::Class {
+                meta: meta.fold(folder),
+                abstract_,
+                name,
+                generics: generics
+                    .iter()
+                    .map(|generic| generic.fold(folder))
+                    .collect(),
+                superclass: superclass
+                    .as_ref()
+                    .map(|superclass| superclass.fold(folder)),
+                mixins: mixins.iter().map(|mixin| mixin.fold(folder)).collect(),
+                interfaces: interfaces
+                    .iter()
+                    .map(|interface| interface.fold(folder))
+                    .collect(),
+                members: members.iter().map(|member| member.fold(folder)).collect(),
+            }),
             Item::MixinClass {
                 ref meta,
                 abstract_,
@@ -247,9 +245,6 @@ impl Fold for Node<ClassMember> {
     }
     fn super_fold<F: Folder>(&self, folder: &mut F) -> Self {
         match **self {
-            ClassMember::Comments(ref comments) => {
-                Node::new(ClassMember::Comments(comments.clone()))
-            }
             ClassMember::Redirect {
                 ref meta,
                 ref method_qualifiers,

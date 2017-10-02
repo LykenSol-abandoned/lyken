@@ -11,7 +11,7 @@ impl Printer {
     }
 
     fn dsl_item(&mut self, item: &Item) {
-        self.enter(BoxKind::Block);
+        self.enter_block();
         match *item {
             Item::ComponentDef {
                 name,
@@ -22,9 +22,9 @@ impl Printer {
                 self.print_str("def ");
                 self.print_ident(name);
                 self.print_str(" {");
-                self.enter(BoxKind::Block);
+                self.enter_block();
                 for field in fields {
-                    self.enter(BoxKind::Block);
+                    self.enter_block();
                     self.dsl_field_def(field);
                     self.enter(BoxKind::CommaDelim);
                     self.exit();
@@ -92,7 +92,7 @@ impl Printer {
                 self.dart_qualified(path);
                 if !unnamed.is_empty() {
                     self.print_str("(");
-                    self.enter(BoxKind::Inline);
+                    self.enter(BoxKind::Group);
                     for (i, unnamed_item) in unnamed.iter().enumerate() {
                         self.dsl_expr(unnamed_item);
                         if i < unnamed.len() - 1 {
@@ -105,7 +105,7 @@ impl Printer {
                 }
                 if !config.is_empty() {
                     self.print_str(" {");
-                    self.enter(BoxKind::Block);
+                    self.enter_block();
                     for (i, c) in config.iter().enumerate() {
                         self.dsl_config(c);
                         if i < config.len() - 1 {
@@ -119,7 +119,7 @@ impl Printer {
             }
             Expr::Array(ref args) => {
                 self.print_str("[");
-                self.enter(BoxKind::Inline);
+                self.enter(BoxKind::Group);
                 for (i, arg) in args.iter().enumerate() {
                     self.dsl_expr(arg);
                     if i < args.len() - 1 {
