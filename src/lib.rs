@@ -18,6 +18,7 @@ use std::fmt;
 
 #[macro_use]
 pub mod node;
+pub mod gll;
 
 pub mod dart {
     pub mod ast;
