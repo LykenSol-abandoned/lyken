@@ -43,7 +43,7 @@ impl Platform {
         let lib_path = Path::new(PATH).join("lib");
         if !lib_path.exists() {
             with_cmd(|cmd| {
-                let status = cmd.arg("flutter doctor").status().unwrap();
+                let status = cmd.arg("flutter precache").status().unwrap();
                 if !status.success() {
                     process::exit(1);
                 }
