@@ -15,7 +15,7 @@ thread_local!(static FLUTTER_PATH: PathBuf = {
     let cache_dir = PathBuf::from(env::var_os("APPDATA").unwrap()).join("Lyken/cache");
 
     #[cfg(unix)]
-    let cache_dir = xdg::BaseDirectories::with_prefix("lyken").unwrap()
+    let cache_dir = ::xdg::BaseDirectories::with_prefix("lyken").unwrap()
         .create_cache_directory("").unwrap();
 
     fs::create_dir_all(&cache_dir).unwrap();
