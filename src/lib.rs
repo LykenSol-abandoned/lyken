@@ -5,10 +5,12 @@
 extern crate enum_primitive;
 #[macro_use]
 extern crate error_chain;
+extern crate git2;
 extern crate syntax;
 extern crate unicode_width;
 extern crate unicode_xid;
 extern crate url;
+extern crate xdg;
 
 use syntax::codemap::{self, BytePos, CodeMap, FilePathMapping, NO_EXPANSION, SPAN_DEBUG};
 use std::rc::Rc;

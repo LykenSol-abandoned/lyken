@@ -5,10 +5,9 @@ license = "MIT/Apache-2.0"
 name = "lyken"
 repository = "https://github.com/lykenware/lyken"
 version = "0.1.0"
-
 [[bin]]
-name = "lyken"
 doc = false
+name = "lyken"
 test = false
 
 [[example]]
@@ -44,11 +43,13 @@ clap = "2.26.1"
 difference = "1.0.0"
 enum_primitive = "0.1.1"
 error-chain = "0.10.0"
+git2 = "0.6.8"
 mktemp = "0.3.1"
 unicode-width = "0.1.4"
 unicode-xid = "0.1.0"
 url = "1.5.1"
 walkdir = "1.0.7"
+xdg = "2.1.0"
 
 [lib]
 doctest = false

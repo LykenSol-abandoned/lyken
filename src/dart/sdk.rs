@@ -1,14 +1,41 @@
+use git2::{Oid, Repository};
 use std::collections::HashMap;
 use std::env;
 use std::io::prelude::*;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use url::Url;
 
-pub const FLUTTER_PATH: &str = "flutter/";
-pub const ENGINE_PATH: &str = "flutter/bin/cache/pkg/sky_engine/lib/";
-pub const PATH: &str = "flutter/bin/cache/dart-sdk/";
+const FLUTTER_REPO: &str = "https://github.com/lykenware/flutter";
+const FLUTTER_REPO_REV: &str = "e16e4024164756de13d7ca1b3ffad385229b840b";
+
+thread_local!(static FLUTTER_PATH: PathBuf = {
+    #[cfg(windows)]
+    let cache_dir = PathBuf::from(env::var_os("APPDATA").unwrap()).join("Lyken/cache");
+
+    #[cfg(unix)]
+    let cache_dir = xdg::BaseDirectories::with_prefix("lyken").unwrap()
+        .create_cache_directory("").unwrap();
+
+    fs::create_dir_all(&cache_dir).unwrap();
+    let flutter_dir = cache_dir.join("flutter");
+    if !flutter_dir.exists() {
+        let flutter_tmp_dir = cache_dir.join("flutter-tmp");
+        if flutter_tmp_dir.is_dir() {
+            fs::remove_dir_all(&flutter_tmp_dir).unwrap();
+        }
+        let repo = Repository::clone(FLUTTER_REPO, &flutter_tmp_dir).unwrap();
+        repo.set_head_detached(Oid::from_str(FLUTTER_REPO_REV).unwrap()).unwrap();
+        repo.checkout_head(None).unwrap();
+        drop(repo);
+        fs::rename(&flutter_tmp_dir, &flutter_dir).unwrap();
+    }
+    flutter_dir
+});
+
+const ENGINE_SUBPATH: &str = "bin/cache/pkg/sky_engine";
+const SDK_SUBPATH: &str = "bin/cache/dart-sdk";
 
 pub fn with_cmd<F: FnOnce(&mut Command) -> R, R>(f: F) -> R {
     let (sh, dash_c) = if cfg!(target_os = "windows") {
@@ -16,20 +43,21 @@ pub fn with_cmd<F: FnOnce(&mut Command) -> R, R>(f: F) -> R {
     } else {
         ("sh", "-c")
     };
-    let lyken_dir = env::current_dir().unwrap();
-    let path_env_var = env::join_paths(
-        env::var_os("PATH")
-            .iter()
-            .flat_map(env::split_paths)
-            .chain(Some(lyken_dir.join(&Path::new(PATH).join("bin"))))
-            .chain(Some(lyken_dir.join(&Path::new(FLUTTER_PATH).join("bin")))),
-    ).unwrap();
-    f(
-        Command::new(sh)
-            .arg(dash_c)
-            .env("PATH", path_env_var)
-            .env("FLUTTER_ROOT", FLUTTER_PATH),
-    )
+    FLUTTER_PATH.with(|flutter_path| {
+        let path_env_var = env::join_paths(
+            env::var_os("PATH")
+                .iter()
+                .flat_map(env::split_paths)
+                .chain(Some(flutter_path.join(SDK_SUBPATH).join("bin")))
+                .chain(Some(flutter_path.join("bin"))),
+        ).unwrap();
+        f(
+            Command::new(sh)
+                .arg(dash_c)
+                .env("PATH", path_env_var)
+                .env("FLUTTER_ROOT", flutter_path),
+        )
+    })
 }
 
 thread_local!(pub static PLATFORM: Platform = Platform::load());
@@ -40,7 +68,7 @@ pub struct Platform {
 
 impl Platform {
     fn load() -> Platform {
-        let lib_path = Path::new(PATH).join("lib");
+        let lib_path = FLUTTER_PATH.with(|p| p.join(SDK_SUBPATH).join("lib"));
         if !lib_path.exists() {
             with_cmd(|cmd| {
                 let status = cmd.arg("flutter precache").status().unwrap();
@@ -72,10 +100,13 @@ impl Platform {
         }
         platform.libraries.insert(
             String::from("ui"),
-            Path::new(ENGINE_PATH)
-                .join("ui/ui.dart")
-                .canonicalize()
-                .unwrap(),
+            FLUTTER_PATH.with(|flutter_path| {
+                flutter_path
+                    .join(ENGINE_SUBPATH)
+                    .join("lib/ui/ui.dart")
+                    .canonicalize()
+                    .unwrap()
+            }),
         );
         platform
     }
