@@ -1,8 +1,15 @@
+#![feature(decl_macro, rustc_private, str_escape)]
+
+extern crate ordermap;
+extern crate syntax;
+
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::fmt;
 use std::hash::Hash;
 use std::io::{self, Write};
+
+pub mod grammar;
 
 #[derive(Default)]
 pub struct Parser<L: Label> {
@@ -102,10 +109,7 @@ pub struct ParseGraph<L: Label> {
 }
 
 impl<L: Label> ParseGraph<L> {
-    pub fn add_packed(&mut self, mut l: L, w: ParseNode<L>, z: ParseNode<L>) -> ParseNode<L> {
-        if l.dot_at_end() {
-            l = l.parent_nonterminal();
-        }
+    pub fn add_packed(&mut self, l: L, w: ParseNode<L>, z: ParseNode<L>) -> ParseNode<L> {
         let (y, p) = if w != ParseNode::DUMMY {
             (
                 ParseNode {
@@ -220,7 +224,4 @@ impl<L: Label> Parser<L> {
 
 pub trait Label: fmt::Display + Ord + Hash + Copy {
     fn nonterminal_before_dot(&self) -> Option<Self>;
-    fn dot_at_end(&self) -> bool;
-    fn parent_nonterminal(&self) -> Self;
-    fn parse(p: &mut Parser<Self>, input: &[u8]) -> Result<(), ()>;
 }
