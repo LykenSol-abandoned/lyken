@@ -1,6 +1,8 @@
 use std::fs::File;
 
-mod gamma0;
+mod gamma0 {
+    include!(concat!(env!("OUT_DIR"), "/gamma0.rs"));
+}
 
 #[test]
 fn gamma_0() {
