@@ -1,5 +1,6 @@
 #![feature(rustc_private)]
 extern crate lyken;
+extern crate syntax_pos;
 extern crate walkdir;
 
 use std::env;
@@ -16,7 +17,7 @@ fn main() {
             match Parser::new(entry.path(), &tokens).dart_module() {
                 Ok(module) => {
                     let result = Printer::new().dart_items(&module.items);
-                    let fm = lyken::codemap().new_filemap(String::new(), result);
+                    let fm = lyken::codemap().new_filemap(syntax_pos::FileName::Anon, result);
                     let result = Lexer::new(lyken::mk_sp(fm.start_pos, fm.end_pos))
                         .tokenize()
                         .unwrap();

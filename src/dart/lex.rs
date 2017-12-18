@@ -5,7 +5,7 @@ use std::fmt;
 use std::path::Path;
 use std::rc::Rc;
 use std::str;
-use syntax::codemap::{BytePos, FileMap, Pos};
+use syntax::codemap::{BytePos, FileMap, FileName, Pos};
 use syntax::symbol::Symbol;
 use Span;
 
@@ -156,7 +156,7 @@ impl Lexer {
     pub fn from_file(path: &Path) -> ::std::io::Result<Lexer> {
         let codemap = ::codemap();
         let file = codemap
-            .get_filemap(path.to_str().unwrap())
+            .get_filemap(&FileName::Real(path.to_path_buf()))
             .ok_or(())
             .or_else(|_| codemap.load_file(path))?;
         Ok(Lexer::new(::mk_sp(file.start_pos, file.end_pos)))
