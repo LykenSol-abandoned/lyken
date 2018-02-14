@@ -24,7 +24,8 @@ fn gll10_g0() {
             .print(&mut File::create("target/gll10-g0-gss.dot").unwrap())
             .unwrap();
         parser
-            .print_sppf(&mut File::create("target/gll10-g0-sppf.dot").unwrap())
+            .sppf
+            .print(&mut File::create("target/gll10-g0-sppf.dot").unwrap())
             .unwrap();
     });
 }
@@ -41,7 +42,8 @@ fn gll13_g1() {
             .print(&mut File::create("target/gll13-g1-gss.dot").unwrap())
             .unwrap();
         parser
-            .print_sppf(&mut File::create("target/gll13-g1-sppf.dot").unwrap())
+            .sppf
+            .print(&mut File::create("target/gll13-g1-sppf.dot").unwrap())
             .unwrap();
     });
 }
@@ -58,7 +60,8 @@ fn gll15_g0() {
             .print(&mut File::create("target/gll15-g0-gss.dot").unwrap())
             .unwrap();
         parser
-            .print_sppf(&mut File::create("target/gll15-g0-sppf.dot").unwrap())
+            .sppf
+            .print(&mut File::create("target/gll15-g0-sppf.dot").unwrap())
             .unwrap();
     });
 }
