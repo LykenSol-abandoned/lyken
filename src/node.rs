@@ -6,7 +6,6 @@ use std::hash::{Hash, Hasher};
 use std::marker::Unsize;
 use std::ops::{CoerceUnsized, Deref};
 use std::rc::{Rc, Weak};
-use std::thread::LocalKeyState;
 
 pub struct Node<T: ?Sized> {
     ptr: Rc<T>,
@@ -98,11 +97,11 @@ impl<V> NodeRemove for RefCell<HashMap<OpaqueKey, V>> {
 impl<T: ?Sized> Drop for Node<T> {
     fn drop(&mut self) {
         if Rc::strong_count(&self.ptr) == 1 {
-            if let LocalKeyState::Valid = NODE_MAPS.state() {
-                NODE_MAPS.with(|maps| for map in maps.borrow().iter() {
+            let _ = NODE_MAPS.try_with(|maps| {
+                for map in maps.borrow().iter() {
                     map.remove_node(node_key(self));
-                })
-            }
+                }
+            });
         }
     }
 }
