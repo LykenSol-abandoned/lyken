@@ -1,13 +1,13 @@
-use std::ops::Add;
-use std::rc::Rc;
-use ParseLabelKind;
+use ordermap::OrderMap;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write as FmtWrite;
 use std::io::Write;
 use std::mem;
-use ordermap::OrderMap;
+use std::ops::Add;
+use std::rc::Rc;
+use ParseLabelKind;
 
 pub struct Grammar<A> {
     rules: OrderMap<String, RuleWithNamedFields<A>>,
