@@ -174,7 +174,7 @@ impl Atom for str {
         format!("\"{}\"", self.escape_default())
     }
     fn to_rust_slice(&self) -> String {
-        format!("{:?}.as_bytes()", self)
+        format!("{:?}", self)
     }
 }
 
@@ -241,13 +241,13 @@ impl<A: Atom + Ord> Grammar<A> {
         let mut named_parse_labels = vec![];
         let mut code_labels = vec![];
 
-        put!("extern crate lyken_gll;
+        put!("extern crate lyken_gll as gll;
 
-use self::lyken_gll::{Call, Continuation, ParseLabel, CodeLabel, ParseLabelKind, ParseNode, Range};
+use self::gll::{Call, Continuation, ParseLabel, CodeLabel, ParseLabelKind, ParseNode, Range};
 use std::fmt;
 use std::marker::PhantomData;
 
-pub type Parser<'a, 'i> = lyken_gll::Parser<'i, _P, _C, &'a [u8]>;
+pub type Parser<'a, 'i> = gll::Parser<'i, _P, _C, &'a gll::Str>;
 
 #[derive(Debug)]
 pub struct Ambiguity;
