@@ -1,0 +1,16 @@
+[package]
+authors = ["The Lyken developers"]
+description = "Dart parser using lyken-gll."
+license = "MIT/Apache-2.0"
+name = "lyken-gll-dart"
+repository = "https://github.com/lykenware/lyken"
+version = "0.1.0"
+
+[dependencies]
+lyken-gll = { path = "../gll" }
+
+[build-dependencies]
+lyken-gll = { path = "../gll" }
+
+[lib]
+doctest = false

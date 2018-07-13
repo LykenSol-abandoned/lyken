@@ -59,5 +59,6 @@ test = false
 [workspace]
 members = [
     "gll",
-    "gll_tests"
+    "gll_tests",
+    "gll_dart"
 ]
