@@ -523,8 +523,12 @@ fn parse(p: &mut Parser) {
             put!((
                 reify_as(CodeLabel(name.clone())) +
                 rule.rule.generate_parse(parse_labels) +
-                thunk!(&format!("
-                p.sppf.add({}, c.frame.range.subtract_suffix(_range), 0);", parse_label)) +
+                thunk!(&if parse_labels.is_none() {
+                    String::new()
+                } else {
+                    format!("
+                p.sppf.add({}, c.frame.range.subtract_suffix(_range), 0);", parse_label)
+                }) +
                 ret()
             )(Continuation {
                 code_labels: &mut code_labels,
