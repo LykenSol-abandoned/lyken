@@ -1,6 +1,14 @@
 #![feature(
-    arbitrary_self_types, decl_macro, fn_traits, from_ref, nll, range_contains, slice_patterns,
-    str_escape, try_from, unboxed_closures
+    arbitrary_self_types,
+    decl_macro,
+    fn_traits,
+    from_ref,
+    nll,
+    range_contains,
+    slice_patterns,
+    str_escape,
+    try_from,
+    unboxed_closures
 )]
 
 extern crate indexing;
@@ -13,6 +21,7 @@ use std::collections::{BTreeSet, BinaryHeap, HashMap};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
+use std::mem;
 use std::ops::{Deref, RangeInclusive};
 use std::str;
 
@@ -306,15 +315,15 @@ impl<'i, C: Ord> Ord for Call<'i, C> {
 }
 
 pub struct CallNode<'i, C: CodeLabel> {
-    returns: BTreeSet<Continuation<'i, C>>,
-    lengths: BTreeSet<usize>,
+    returns: SmolSet<Continuation<'i, C>>,
+    lengths: SmolSet<usize>,
 }
 
-impl<'i, C: CodeLabel> CallNode<'i, C> {
-    pub fn new() -> Self {
+impl<'i, C: CodeLabel> Default for CallNode<'i, C> {
+    fn default() -> Self {
         CallNode {
-            returns: BTreeSet::new(),
-            lengths: BTreeSet::new(),
+            returns: SmolSet::default(),
+            lengths: SmolSet::default(),
         }
     }
 }
@@ -329,7 +338,7 @@ impl<'i, C: CodeLabel> CallGraph<'i, C> {
         writeln!(out, "digraph gss {{")?;
         writeln!(out, "    graph [rankdir=RL]")?;
         for (call, node) in &self.calls {
-            for next in &node.returns {
+            for next in node.returns.iter() {
                 writeln!(
                     out,
                     r#"    "{:?}" -> "{:?}" [label="{:?}"]"#,
@@ -353,10 +362,10 @@ impl<'i, C: CodeLabel> CallGraph<'i, C> {
         self.results(call).rev().next()
     }
     pub fn call(&mut self, call: Call<'i, C>, next: Continuation<'i, C>) {
-        let node = self.calls.entry(call).or_insert(CallNode::new());
+        let node = self.calls.entry(call).or_default();
         if node.returns.insert(next) {
             if node.returns.len() > 1 {
-                for &len in &node.lengths {
+                for &len in node.lengths.iter() {
                     self.threads.spawn(next, Range(call.range.split_at(len).1));
                 }
             } else {
@@ -372,27 +381,83 @@ impl<'i, C: CodeLabel> CallGraph<'i, C> {
         }
     }
     pub fn ret(&mut self, call: Call<'i, C>, remaining: Range<'i>) {
-        let node = self.calls.entry(call).or_insert(CallNode::new());
+        let node = self.calls.entry(call).or_default();
         if node
             .lengths
             .insert(call.range.subtract_suffix(remaining).len())
         {
-            for &next in &node.returns {
+            for &next in node.returns.iter() {
                 self.threads.spawn(next, remaining);
             }
         }
     }
 }
 
+pub enum SmolSet<T> {
+    Empty,
+    One(T),
+    Many(BTreeSet<T>),
+}
+
+impl<T> Default for SmolSet<T> {
+    fn default() -> Self {
+        SmolSet::Empty
+    }
+}
+
+impl<T: Ord> SmolSet<T> {
+    pub fn insert(&mut self, x: T) -> bool {
+        match mem::replace(self, SmolSet::Empty) {
+            SmolSet::Empty => {
+                *self = SmolSet::One(x);
+                true
+            }
+            SmolSet::One(y) => {
+                if x == y {
+                    *self = SmolSet::One(y);
+                    false
+                } else {
+                    let mut set = BTreeSet::new();
+                    assert!(set.insert(y));
+                    assert!(set.insert(x));
+                    *self = SmolSet::Many(set);
+                    true
+                }
+            }
+            SmolSet::Many(mut set) => {
+                let r = set.insert(x);
+                *self = SmolSet::Many(set);
+                r
+            }
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            SmolSet::Empty => 0,
+            SmolSet::One(_) => 1,
+            SmolSet::Many(set) => set.len(),
+        }
+    }
+
+    pub fn iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = &'a T> {
+        match self {
+            SmolSet::Empty => None.into_iter().chain(None.into_iter().flatten()),
+            SmolSet::One(x) => Some(x).into_iter().chain(None.into_iter().flatten()),
+            SmolSet::Many(set) => None.into_iter().chain(Some(set).into_iter().flatten()),
+        }
+    }
+}
+
 pub struct ParseGraph<'i, P: ParseLabel> {
-    pub children: HashMap<ParseNode<'i, P>, BTreeSet<usize>>,
+    pub children: HashMap<ParseNode<'i, P>, SmolSet<usize>>,
 }
 
 impl<'i, P: ParseLabel> ParseGraph<'i, P> {
     pub fn add(&mut self, l: P, range: Range<'i>, child: usize) {
         self.children
             .entry(ParseNode { l, range })
-            .or_insert(BTreeSet::new())
+            .or_default()
             .insert(child);
     }
 
@@ -455,7 +520,7 @@ impl<'i, P: ParseLabel> ParseGraph<'i, P> {
             match source.l.kind() {
                 ParseLabelKind::Opaque => {}
 
-                ParseLabelKind::Choice => for &child in children {
+                ParseLabelKind::Choice => for &child in children.iter() {
                     let child = ParseNode {
                         l: P::from_usize(child),
                         range: source.range,
@@ -466,7 +531,7 @@ impl<'i, P: ParseLabel> ParseGraph<'i, P> {
                     p += 1;
                 },
 
-                ParseLabelKind::Unary(l) => for &child in children {
+                ParseLabelKind::Unary(l) => for &child in children.iter() {
                     assert_eq!(child, 0);
                     let child = ParseNode {
                         l,
@@ -478,7 +543,7 @@ impl<'i, P: ParseLabel> ParseGraph<'i, P> {
                     p += 1;
                 },
 
-                ParseLabelKind::Binary(left_l, right_l) => for &child in children {
+                ParseLabelKind::Binary(left_l, right_l) => for &child in children.iter() {
                     let (left, right, _) = source.range.split_at(child);
                     let (left, right) = (
                         ParseNode {
