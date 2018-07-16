@@ -60,5 +60,6 @@ test = false
 members = [
     "gll",
     "gll_tests",
-    "gll_dart"
+    "gll_dart",
+    "gll_c"
 ]
