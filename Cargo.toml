@@ -57,7 +57,4 @@ doctest = false
 test = false
 
 [workspace]
-members = [
-    "gll",
-    "gll_tests"
-]
+members = []
