@@ -12,7 +12,8 @@ use lyken::dart::parse::Parser;
 use lyken::dart::print::Printer;
 use lyken::dsl::lower::Lowerer;
 
-fn main() {
+fn main() { lyken::with_globals(lyken_main) }
+fn lyken_main() {
     let matches = clap_app!(lyken =>
         (@subcommand reformat =>
             (@arg FILE: +required)

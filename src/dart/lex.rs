@@ -1,4 +1,4 @@
-#![allow(unused_doc_comment)]
+#![allow(unused_doc_comments)]
 
 use unicode_xid::UnicodeXID;
 use std::fmt;
@@ -128,23 +128,8 @@ impl Lexer {
         let end = ::codemap().lookup_byte_offset(span.hi);
         assert_eq!(begin.fm.start_pos, end.fm.start_pos);
 
-        let filemap = begin.fm;
-        let src = filemap.src.clone().unwrap();
-        if filemap.lines.borrow().is_empty() {
-            filemap.next_line(filemap.start_pos);
-            for (i, c) in src.char_indices() {
-                if c == '\n' {
-                    filemap.next_line(filemap.start_pos + Pos::from_usize(i + 1));
-                }
-                let ch_len = c.len_utf8();
-                if ch_len > 1 {
-                    filemap.record_multibyte_char(filemap.start_pos + Pos::from_usize(i), ch_len);
-                }
-            }
-        }
-
         Lexer {
-            filemap,
+            filemap: begin.fm,
             pos: span.lo,
             next_pos: span.lo,
             end: span.hi,

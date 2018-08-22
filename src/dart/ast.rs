@@ -48,13 +48,13 @@ impl Module {
 
         let path_buf;
         let mut path = path;
-        let module = do catch {
+        let module: parse::ParseResult<_> = do catch {
             path_buf = path.canonicalize()?;
             path = &path_buf;
             if let Some(module) = CACHE.with(|c| c.borrow().get(path).cloned()) {
                 return module;
             }
-            parse::Parser::with_file(path, |p| p.dart_module())
+            parse::Parser::with_file(path, |p| p.dart_module())?
         };
         let module = match module {
             Ok(module) => module,
@@ -295,8 +295,8 @@ pub enum FnName {
 }
 
 impl FnName {
-    pub fn regular<S: Into<Symbol>>(name: S) -> Self {
-        FnName::Regular(name.into())
+    pub fn regular<S: ::IntoSymbol>(name: S) -> Self {
+        FnName::Regular(name.into_symbol())
     }
 }
 
@@ -351,10 +351,10 @@ pub struct Qualified {
 }
 
 impl Qualified {
-    pub fn one<S: Into<Symbol>>(name: S, params: Vec<Node<Type>>) -> Node<Qualified> {
+    pub fn one<S: ::IntoSymbol>(name: S, params: Vec<Node<Type>>) -> Node<Qualified> {
         Node::new(Qualified {
             prefix: None,
-            name: name.into(),
+            name: name.into_symbol(),
             params,
         })
     }
@@ -531,7 +531,7 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn simple_path<S: Into<Symbol>>(name: S) -> Node<Type> {
+    pub fn simple_path<S: ::IntoSymbol>(name: S) -> Node<Type> {
         Node::new(Type::Path(Qualified::one(name, vec![])))
     }
 }
@@ -711,7 +711,7 @@ pub enum MetaItem {
 }
 
 impl MetaItem {
-    pub fn simple<S: Into<Symbol>>(name: S) -> MetaItem {
+    pub fn simple<S: ::IntoSymbol>(name: S) -> MetaItem {
         MetaItem::Attribute {
             qualified: Qualified::one(name, vec![]),
             arguments: None,
@@ -798,7 +798,7 @@ pub struct ArgDef {
 }
 
 impl ArgDef {
-    pub fn simple<S: Into<Symbol>>(ty: Node<Type>, name: S) -> ArgDef {
+    pub fn simple<S: ::IntoSymbol>(ty: Node<Type>, name: S) -> ArgDef {
         ArgDef {
             meta: vec![],
             covariant: false,
@@ -806,7 +806,7 @@ impl ArgDef {
             field: false,
             default_uses_eq: false,
             var: Node::new(VarDef {
-                name: name.into(),
+                name: name.into_symbol(),
                 init: None,
             }),
         }

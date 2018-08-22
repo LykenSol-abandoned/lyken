@@ -9,7 +9,8 @@ use lyken::dart::print::Printer;
 use lyken::dsl::lower::Lowerer;
 use lyken::dsl::resolve;
 
-fn main() {
+fn main() { lyken::with_globals(lyken_main) }
+fn lyken_main() {
     let path = PathBuf::from(env::args().nth(1).unwrap());
     match Parser::with_file(&path, |mut p| p.dsl_items()) {
         Ok(items) => {
