@@ -1,4 +1,4 @@
-#![allow(unused_doc_comment)]
+#![allow(unused_doc_comments)]
 
 use syntax::codemap::BytePos;
 use syntax::symbol::Symbol;

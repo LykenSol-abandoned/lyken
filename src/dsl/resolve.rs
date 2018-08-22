@@ -4,7 +4,6 @@ use dart::visit::Visit as DartVisit;
 use dsl::ast::{FieldDef, Item};
 use dsl::visit::{Visit, Visitor};
 use node::Node;
-use syntax::symbol::Symbol;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Res {
@@ -29,7 +28,7 @@ pub fn resolve(items: &[Node<Item>], fully_resolve: bool) {
 }
 
 impl Collector {
-    pub fn record_dsl<S: Into<Symbol>>(&mut self, name: S, res: Res) {
+    pub fn record_dsl<S: ::IntoSymbol>(&mut self, name: S, res: Res) {
         self.record(name, dart::resolve::Res::Dsl(res));
     }
 }

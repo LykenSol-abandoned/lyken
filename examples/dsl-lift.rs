@@ -9,7 +9,8 @@ use lyken::dart::print::Printer;
 use lyken::dart::resolve;
 use lyken::dsl::lift::Lifter;
 
-fn main() {
+fn main() { lyken::with_globals(lyken_main) }
+fn lyken_main() {
     let path = PathBuf::from(env::args().nth(1).unwrap());
     let module = Module::load(&path);
     resolve::resolve(module.clone(), true);

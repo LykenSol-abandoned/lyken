@@ -180,8 +180,8 @@ impl Collector {
         Rc::make_mut(&mut self.scope)
     }
 
-    pub fn record<S: Into<Symbol>>(&mut self, name: S, res: Res) {
-        self.scope_mut().map.insert(name.into(), res);
+    pub fn record<S: ::IntoSymbol>(&mut self, name: S, res: Res) {
+        self.scope_mut().map.insert(name.into_symbol(), res);
     }
 
     pub fn import(

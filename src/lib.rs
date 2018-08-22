@@ -1,5 +1,4 @@
-#![feature(catch_expr, coerce_unsized, conservative_impl_trait, rustc_private, unsize,
-          thread_local_state)]
+#![feature(catch_expr, coerce_unsized, rustc_private, unsize)]
 
 #[macro_use]
 extern crate enum_primitive;
@@ -13,6 +12,7 @@ extern crate url;
 extern crate xdg;
 
 use syntax::codemap::{self, BytePos, CodeMap, FilePathMapping, NO_EXPANSION, SPAN_DEBUG};
+use syntax::symbol::Symbol;
 use std::rc::Rc;
 use std::fmt;
 
@@ -41,7 +41,29 @@ pub mod dsl {
     pub mod visit;
 }
 
+pub trait IntoSymbol {
+    fn into_symbol(self) -> Symbol;
+}
+
+impl IntoSymbol for Symbol {
+    fn into_symbol(self) -> Symbol {
+        self
+    }
+}
+
+impl<'a> IntoSymbol for &'a str {
+    fn into_symbol(self) -> Symbol {
+        Symbol::intern(self)
+    }
+}
+
+pub fn with_globals<R>(f: impl FnOnce() -> R) -> R {
+    syntax::with_globals(f)
+}
+
 pub fn codemap() -> Rc<CodeMap> {
+    assert!(syntax::GLOBALS.is_set());
+
     thread_local!(static CODEMAP: Rc<CodeMap> = {
         SPAN_DEBUG.with(|d| d.set(|span, f| {
             write!(f, "{}", codemap().span_to_string(span))

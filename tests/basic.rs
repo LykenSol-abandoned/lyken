@@ -5,11 +5,6 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn all_dsl() {
-    // FIXME re-enable when it works again (Symbol wants a compiler session now).
-    if true {
-        return;
-    }
-
     let status = Command::new("cargo")
         .args(&["build", "--examples", "--release"])
         .stdout(Stdio::null())
